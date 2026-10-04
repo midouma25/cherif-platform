@@ -1,22 +1,31 @@
 import React, { useState } from 'react';
 import { Lock, Mail, User, CheckCircle, Terminal, ShieldAlert, ArrowLeft, Code } from 'lucide-react';
+import axios from 'axios';
 
 const Vault = () => {
   const [formData, setFormData] = useState({ name: '', email: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
-  const handleSubmit = (e) => {
+const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.name || !formData.email) return;
 
     setIsSubmitting(true);
     
-    // محاكاة إرسال البيانات للسيرفر (سنربطها لاحقاً بـ Node.js و MongoDB)
-    setTimeout(() => {
+    try {
+      // إرسال البيانات الحقيقية إلى سيرفر AutoFactory (المنفذ 5000)
+      const response = await axios.post('http://localhost:5000/api/vault/submit', formData);
+      
+      if (response.data.success) {
+        setIsSuccess(true); // إظهار شاشة النجاح فقط إذا رد السيرفر بنجاح
+      }
+    } catch (error) {
+      console.error("❌ فشل الاتصال بالسيرفر:", error);
+      alert("عذراً، حدث خطأ أثناء إرسال البيانات. تأكد أن السيرفر يعمل.");
+    } finally {
       setIsSubmitting(false);
-      setIsSuccess(true);
-    }, 1500);
+    }
   };
 
   return (
