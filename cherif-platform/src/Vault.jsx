@@ -1,11 +1,18 @@
 import React, { useState } from 'react';
 import { Lock, Mail, User, CheckCircle, Terminal, ShieldAlert, ArrowLeft, Code } from 'lucide-react';
 import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
+import { useContext } from 'react';
+import { AuthContext } from './AuthContext';
+
 
 const Vault = () => {
   const [formData, setFormData] = useState({ name: '', email: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const navigate = useNavigate();
+  const { login } = useContext(AuthContext);
+
 
 const handleSubmit = async (e) => {
     e.preventDefault();
@@ -13,12 +20,15 @@ const handleSubmit = async (e) => {
 
     setIsSubmitting(true);
     
-    try {
-      // إرسال البيانات الحقيقية إلى سيرفر AutoFactory (المنفذ 5000)
-      const response = await axios.post('http://localhost:5000/api/vault/submit', formData);
+try {
+      const response = await axios.post('http://localhost:5001/api/auth/vault-signup', formData);
       
       if (response.data.success) {
-        setIsSuccess(true); // إظهار شاشة النجاح فقط إذا رد السيرفر بنجاح
+        // تسجيل الدخول في الـ Context
+        login(response.data.user, response.data.token);
+        
+        // توجيه المستخدم فوراً إلى مكتبته الشخصية!
+        navigate('/hub'); 
       }
     } catch (error) {
       console.error("❌ فشل الاتصال بالسيرفر:", error);

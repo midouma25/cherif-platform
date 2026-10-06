@@ -4,6 +4,9 @@ import { Code, Database, Briefcase, Lock, Sparkles, Terminal } from 'lucide-reac
 import Vault from './Vault';
 import B2B from './B2B';
 import Academy from './Academy';
+import { AuthProvider } from './AuthContext';
+import AdminDashboard from './AdminDashboard';
+import ProtectedRoute from './components/ProtectedRoute';
 // ==========================================
 // 1. مكون شريط التنقل (Navbar)
 // ==========================================
@@ -87,24 +90,34 @@ const Home = () => (
 
 
 
-// ==========================================
-// 3. الهيكل الرئيسي (Main App)
-// ==========================================
 const App = () => {
   return (
-    <Router>
-      <div className="min-h-screen bg-gray-950 text-gray-100 font-sans" dir="rtl">
-        <Navbar />
-        <main className="max-w-6xl mx-auto">
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/vault" element={<Vault />} />
-            <Route path="/academy" element={<Academy />} />
-            <Route path="/b2b" element={<B2B />} />
-          </Routes>
-        </main>
-      </div>
-    </Router>
+    // الغلاف يجب أن يكون هنا، يحيط بالـ Router وكل شيء
+    <AuthProvider>
+      <Router>
+        <div className="min-h-screen bg-gray-950 text-gray-100 font-sans" dir="rtl">
+          <Navbar />
+          <main className="max-w-6xl mx-auto">
+            <Routes>
+               {/* مساراتك هنا */}
+               <Route path="/" element={<Home />} />
+               <Route path="/vault" element={<Vault />} />
+
+                <Route path="/academy" element={<Academy />} /> 
+              <Route path="/b2b" element={<B2B />} />
+               <Route path="/admin" element={
+  <ProtectedRoute allowedRoles={['admin']}>
+    <AdminDashboard />
+  </ProtectedRoute>
+} />
+
+
+               {/* ... */}
+            </Routes>
+          </main>
+        </div>
+      </Router>
+    </AuthProvider>
   );
 };
 

@@ -1,0 +1,49 @@
+# =========================
+# 🚫 الملفات السرية والمفاتيح
+# =========================
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+*.pem
+*.key
+
+# =========================
+# 📦 بيئات ومكتبات Node.js
+# =========================
+node_modules/
+npm-debug.log
+yarn-error.log
+pnpm-debug.log
+
+# =========================
+# 🐍 بيئات ومكتبات Python
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.venv/
+pip-log.txt
+
+# =========================
+# 🏗️️ مجلدات البناء والتصدير (Build)
+# =========================
+dist/
+build/
+out/
+.next/
+
+# =========================
+# 💻 ملفات أنظمة التشغيل والمحررات
+# =========================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
