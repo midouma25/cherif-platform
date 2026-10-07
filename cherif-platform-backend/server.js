@@ -238,6 +238,144 @@ app.get('/api/courses/my-courses', verifyInstructor, async (req, res) => {
     }
 });
 
+// ج) تعديل كورس موجود
+app.put('/api/courses/:id', verifyInstructor, async (req, res) => {
+    try {
+        const course = await Course.findById(req.params.id);
+        if (!course) return res.status(404).json({ error: 'الكورس غير موجود' });
+        
+        // الأمان: التأكد أن من يعدل الكورس هو صاحبه (أو المدير)
+        if (course.instructor.toString() !== req.user.id && req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'غير مصرح لك بتعديل هذا الكورس' });
+        }
+
+        const updatedCourse = await Course.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        res.json({ success: true, course: updatedCourse, message: 'تم التعديل بنجاح' });
+    } catch (error) {
+        res.status(500).json({ error: 'فشل في تعديل الكورس' });
+    }
+});
+
+// د) حذف كورس
+app.delete('/api/courses/:id', verifyInstructor, async (req, res) => {
+    try {
+        const course = await Course.findById(req.params.id);
+        if (!course) return res.status(404).json({ error: 'الكورس غير موجود' });
+
+        if (course.instructor.toString() !== req.user.id && req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'غير مصرح لك بحذف هذا الكورس' });
+        }
+
+        await Course.findByIdAndDelete(req.params.id);
+        res.json({ success: true, message: 'تم حذف الكورس بنجاح' });
+    } catch (error) {
+        res.status(500).json({ error: 'فشل في حذف الكورس' });
+    }
+});
+
+
+// ==========================================
+// 🌍 مسارات الأكاديمية العامة (Public APIs)
+// ==========================================
+
+// جلب كل الكورسات (للجمهور والزوار)
+app.get('/api/courses/public', async (req, res) => {
+    try {
+        // نجلب كل الكورسات ونرتبها من الأحدث للأقدم
+        const courses = await Course.find().sort({ created_at: -1 });
+        res.json({ success: true, courses });
+    } catch (error) {
+        res.status(500).json({ error: 'فشل في جلب قائمة الكورسات' });
+    }
+});
+
+
+// جلب كورس واحد بالتفصيل (للجمهور)
+app.get('/api/courses/public/:id', async (req, res) => {
+    try {
+        const course = await Course.findById(req.params.id);
+        if (!course) return res.status(404).json({ error: 'الكورس غير موجود' });
+        res.json({ success: true, course });
+    } catch (error) {
+        res.status(500).json({ error: 'فشل في جلب تفاصيل الكورس' });
+    }
+});
+
+
+// ==========================================
+// 6. نموذج الدروس (Lesson Schema)
+// ==========================================
+const lessonSchema = new mongoose.Schema({
+    title: { type: String, required: true },
+    description: { type: String }, 
+    content: { type: String, default: '' }, // محتوى الـ Markdown
+    videoUrl: { type: String, default: '' }, 
+    courseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Course', required: true },
+    isFreePreview: { type: Boolean, default: false },
+    order: { type: Number, default: 0 },
+    created_at: { type: Date, default: Date.now }
+});
+
+// تعريف النموذج (يجب أن يكون هنا قبل المسارات)
+const Lesson = mongoose.model('Lesson', lessonSchema);
+
+
+// ==========================================
+// 📚 مسارات الدروس (Lesson APIs)
+// ==========================================
+
+// أ) جلب الدروس (مسار عام)
+app.get('/api/courses/:courseId/lessons', async (req, res) => {
+    try {
+        const lessons = await Lesson.find({ courseId: req.params.courseId }).sort({ order: 1 });
+        
+        const safeLessons = lessons.map(lesson => ({
+            _id: lesson._id,
+            title: lesson.title,
+            description: lesson.description,
+            content: lesson.content,
+            isFreePreview: lesson.isFreePreview,
+            order: lesson.order,
+            videoUrl: lesson.isFreePreview ? lesson.videoUrl : null 
+        }));
+
+        res.json({ success: true, lessons: safeLessons });
+    } catch (error) {
+        console.error('❌ خطأ في جلب الدروس:', error); // سيطبع الخطأ الحقيقي في التيرمينال
+        res.status(500).json({ error: 'فشل في جلب الدروس' });
+    }
+});
+
+// ب) إضافة درس جديد (مسار محمي للأستاذ)
+app.post('/api/courses/:courseId/lessons', verifyInstructor, async (req, res) => {
+    try {
+        const course = await Course.findById(req.params.courseId);
+        if (!course) return res.status(404).json({ error: 'الكورس غير موجود' });
+        
+        if (course.instructor.toString() !== req.user.id && req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'غير مصرح لك' });
+        }
+
+        const newLesson = new Lesson({
+            title: req.body.title,
+            description: req.body.description,
+            content: req.body.content,
+            videoUrl: req.body.videoUrl, 
+            order: req.body.order,
+            isFreePreview: req.body.isFreePreview,
+            courseId: req.params.courseId // تم تصحيح حرف P ليكون صغيراً
+        });
+
+        await newLesson.save();
+        res.json({ success: true, lesson: newLesson, message: 'تمت إضافة الدرس بنجاح' });
+    } catch (error) {
+        console.error('❌ خطأ في إضافة الدرس:', error);
+        res.status(500).json({ error: 'فشل في إضافة الدرس' });
+    }
+});
+
+
+
 
 // ==========================================
 // تشغيل السيرفر

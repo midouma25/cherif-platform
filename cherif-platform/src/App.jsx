@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import { AuthProvider } from './AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Navbar from './components/Navbar';
-
+import InstructorStudio from './InstructorStudio';
 // استيراد الصفحات
 import Vault from './Vault';
 import B2B from './B2B';
@@ -11,6 +11,8 @@ import Academy from './Academy';
 import Auth from './Auth';
 import AdminDashboard from './AdminDashboard';
 import StudentHub from './StudentHub'; // تأكد من استيراد هذه إذا كنت تستخدمها
+import CourseDetails from './CourseDetails';
+import Classroom from './Classroom';
 
 // صفحة مؤقتة للرئيسية
 const Home = () => (
@@ -24,8 +26,6 @@ const Home = () => (
     </div>
 );
 
-// استوديو مؤقت
-const InstructorStudio = () => <div className="p-10 text-center"><h1 className="text-4xl font-bold text-blue-500 mb-4">استوديو الأستاذ 🎙️</h1></div>;
 
 const App = () => {
   return (
@@ -44,7 +44,8 @@ const App = () => {
               <Route path="/academy" element={<Academy />} />
               <Route path="/b2b" element={<B2B />} />
               <Route path="/login" element={<Auth />} />
-
+              <Route path="/course/:id" element={<CourseDetails />} />
+              <Route path="/classroom/:id" element={<Classroom />} />
               {/* مسارات محمية بصلاحيات (RBAC) */}
               <Route path="/hub" element={
                 <ProtectedRoute allowedRoles={['user', 'instructor', 'admin']}>

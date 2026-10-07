@@ -1,149 +1,124 @@
-import React from 'react';
-import { BookOpen, Lock, Unlock, PlayCircle, Star, Code2, Terminal, ArrowLeft } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import { Search, BookOpen, Clock, PlayCircle, Star } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 const Academy = () => {
-  const roadmaps = [
-    {
-      id: "mern-track",
-      title: "مسار هندسة الويب الشاملة (MERN Stack)",
-      description: "من الصفر إلى بناء أنظمة إدارة الموارد (ERP) ونقاط البيع (POS).",
-      icon: <Code2 className="text-blue-400" size={28} />,
-      theme: "blue",
-      steps: [
-        { title: "أساسيات React & Vite", type: "free", duration: "12 دقيقة" },
-        { title: "تصميم واجهات احترافية بـ Tailwind", type: "free", duration: "18 دقيقة" },
-        { title: "بناء سيرفر Node.js & Express", type: "free", duration: "25 دقيقة" },
-        { title: "معسكر بناء نظام POS متكامل للشركات", type: "premium", price: "$99" }
-      ]
-    },
-    {
-      id: "quant-track",
-      title: "مسار التداول الخوارزمي (Quantitative Dev)",
-      description: "استخدم Python والذكاء الاصطناعي لأتمتة استراتيجيات (SMC & ICT).",
-      icon: <Terminal className="text-emerald-400" size={28} />,
-      theme: "emerald",
-      steps: [
-        { title: "إعداد بيئة Python و مكتبات البيانات", type: "free", duration: "15 دقيقة" },
-        { title: "ربط واجهة Binance API", type: "free", duration: "20 دقيقة" },
-        { title: "تحليل زلازل الأسعار (Z-Score)", type: "free", duration: "30 دقيقة" },
-        { title: "المعسكر المغلق: الكود المصدري لبوت Phoenix", type: "premium", price: "$149" }
-      ]
-    }
-  ];
+  const [courses, setCourses] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchPublicCourses = async () => {
+      try {
+        const res = await axios.get('http://127.0.0.1:5001/api/courses/public');
+        if (res.data.success) {
+          setCourses(res.data.courses);
+        }
+      } catch (err) {
+        console.error('خطأ في جلب الكورسات:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchPublicCourses();
+  }, []);
+
+  // فلترة الكورسات حسب البحث
+  const filteredCourses = courses.filter(course => 
+    course.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    course.description.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
-    <div className="min-h-screen py-12 px-6 animate-fade-in-up">
-      <div className="max-w-5xl mx-auto">
+    <div className="min-h-screen py-10 px-6 animate-fade-in-up">
+      <div className="max-w-6xl mx-auto space-y-10">
         
-        {/* الترويسة */}
-        <div className="text-center mb-16 space-y-4">
-          <div className="inline-flex items-center justify-center bg-gray-900 border border-gray-800 w-16 h-16 rounded-2xl mb-4 shadow-lg">
-            <BookOpen className="text-purple-400" size={32} />
-          </div>
-          <h1 className="text-4xl font-black text-white">
-            أكاديمية <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-500">المسارات البرمجية</span>
+        {/* الترويسة وشريط البحث */}
+        <div className="bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 rounded-3xl p-10 flex flex-col items-center text-center shadow-2xl relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-600/10 blur-3xl rounded-full pointer-events-none"></div>
+          
+          <h1 className="text-4xl md:text-5xl font-black text-white mb-4 z-10">
+            أكاديمية <span className="text-emerald-500">Cherif.Dev</span>
           </h1>
-          <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-            توقف عن مشاهدة الدروس العشوائية. اتبع خرائط طريق هندسية واضحة، تعلم الأساسيات مجاناً، وانضم لمعسكراتنا لبناء أنظمة حقيقية تدر عليك الدخل.
+          <p className="text-gray-400 text-lg max-w-2xl mb-8 z-10">
+            ارتقِ بمهاراتك البرمجية والمالية. كورسات مكثفة، تطبيقات عملية، وخلاصة سنوات من الهندسة في مكان واحد.
           </p>
+
+          <div className="relative w-full max-w-xl z-10">
+            <Search className="absolute right-4 top-4 text-gray-500" size={20} />
+            <input 
+              type="text" 
+              placeholder="ابحث عن كورس (مثال: بايثون، MERN)..." 
+              className="w-full bg-gray-950 border border-gray-700 text-white rounded-2xl py-4 pr-12 pl-4 focus:border-emerald-500 outline-none transition-all shadow-inner"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
         </div>
 
-        {/* خرائط الطريق (Roadmaps) */}
-        <div className="space-y-12">
-          {roadmaps.map((roadmap) => (
-            <div key={roadmap.id} className="bg-gray-900/50 border border-gray-800 rounded-3xl p-8 relative overflow-hidden">
-              
-              {/* تزيين لوني */}
-              <div className={`absolute top-0 right-0 w-2 h-full bg-${roadmap.theme}-500`}></div>
-              
-              <div className="flex items-center gap-4 mb-8 border-b border-gray-800 pb-6">
-                <div className={`bg-gray-950 p-4 rounded-xl border border-${roadmap.theme}-900/30 shadow-inner`}>
-                  {roadmap.icon}
-                </div>
-                <div>
-                  <h2 className="text-2xl font-bold text-white mb-2">{roadmap.title}</h2>
-                  <p className="text-gray-400 text-sm">{roadmap.description}</p>
-                </div>
-              </div>
-
-              {/* خطوات المسار */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {roadmap.steps.map((step, index) => (
-                  <div 
-                    key={index} 
-                    className={`relative p-5 rounded-2xl border transition-all flex flex-col h-full ${
-                      step.type === 'free' 
-                        ? 'bg-gray-950 border-gray-800 hover:border-gray-600' 
-                        : 'bg-gradient-to-br from-purple-900/40 to-gray-900 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.15)] group hover:scale-[1.02] cursor-pointer'
-                    }`}
-                  >
-                    {/* خط التوصيل بين الخطوات (يظهر في الشاشات الكبيرة) */}
-                    {index !== roadmap.steps.length - 1 && (
-                      <div className="hidden lg:block absolute top-1/2 left-[-1rem] w-4 h-0.5 bg-gray-800 z-0"></div>
+        {/* عرض الكورسات */}
+        {loading ? (
+          <div className="flex justify-center items-center py-20">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500"></div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {filteredCourses.length > 0 ? (
+              filteredCourses.map((course) => (
+                <div key={course._id} className="bg-gray-900 border border-gray-800 rounded-3xl overflow-hidden group hover:border-emerald-500/50 hover:shadow-[0_0_30px_rgba(16,185,129,0.1)] transition-all flex flex-col">
+                  
+                  {/* صورة الكورس */}
+                  <div className="h-52 bg-gray-800 relative overflow-hidden">
+                    {course.thumbnail ? (
+                      <img src={course.thumbnail} alt={course.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-gray-600">
+                        <BookOpen size={48} />
+                      </div>
                     )}
-
-                    <div className="flex justify-between items-start mb-4 relative z-10">
-                      <span className={`text-3xl font-black opacity-20 ${step.type === 'premium' ? 'text-purple-400' : 'text-gray-500'}`}>
-                        0{index + 1}
-                      </span>
-                      {step.type === 'free' ? (
-                        <span className="bg-emerald-900/30 text-emerald-400 p-1.5 rounded-lg">
-                          <Unlock size={16} />
-                        </span>
-                      ) : (
-                        <span className="bg-purple-600 text-white p-1.5 rounded-lg shadow-lg">
-                          <Lock size={16} />
-                        </span>
-                      )}
-                    </div>
-                    
-                    <h3 className={`font-bold mb-3 flex-grow text-sm ${step.type === 'premium' ? 'text-white' : 'text-gray-300'}`}>
-                      {step.title}
-                    </h3>
-                    
-                    <div className="mt-auto">
-                      {step.type === 'free' ? (
-                        <div className="flex items-center justify-between text-xs text-gray-500 font-bold">
-                          <span className="flex items-center gap-1"><PlayCircle size={14} /> درس مجاني</span>
-                          <span>{step.duration}</span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-between">
-                          <span className="text-purple-400 font-black text-lg">{step.price}</span>
-                          <span className="text-xs font-bold text-white bg-purple-600 px-3 py-1.5 rounded-lg flex items-center gap-1 group-hover:bg-purple-500 transition-colors">
-                            افتح المعسكر <ArrowLeft size={12} />
-                          </span>
-                        </div>
-                      )}
+                    <div className="absolute top-4 left-4 bg-gray-950/80 backdrop-blur-sm text-white px-3 py-1.5 rounded-lg font-black text-sm border border-gray-700">
+                      {course.price === 0 ? <span className="text-emerald-400">مجاني</span> : `$${course.price}`}
                     </div>
                   </div>
-                ))}
-              </div>
 
-            </div>
-          ))}
-        </div>
-
-        {/* حافز إضافي (Social Proof) */}
-        <div className="mt-16 bg-gray-950 border border-gray-800 rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-4">
-            <div className="flex -space-x-3 space-x-reverse">
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="w-10 h-10 rounded-full border-2 border-gray-950 bg-gray-800 flex items-center justify-center text-xs text-gray-400">
-                  <Star size={14} className="text-yellow-500" />
+                  {/* تفاصيل الكورس */}
+                  <div className="p-6 flex-1 flex flex-col">
+                    <div className="flex items-center gap-1 text-yellow-500 text-xs mb-3">
+                      <Star size={14} fill="currentColor" />
+                      <Star size={14} fill="currentColor" />
+                      <Star size={14} fill="currentColor" />
+                      <Star size={14} fill="currentColor" />
+                      <Star size={14} fill="currentColor" />
+                      <span className="text-gray-500 ml-1">(5.0)</span>
+                    </div>
+                    
+                    <h3 className="text-xl font-bold text-white mb-2 line-clamp-2">{course.title}</h3>
+                    <p className="text-gray-400 text-sm mb-6 line-clamp-3">{course.description}</p>
+                    
+                    {/* الفاصل المرن لضمان بقاء الزر في الأسفل */}
+                    <div className="mt-auto">
+                      <div className="flex items-center justify-between text-gray-500 text-xs mb-4 pb-4 border-b border-gray-800">
+                        <div className="flex items-center gap-1"><Clock size={14} /> تعلم بالوتيرة التي تناسبك</div>
+                        <div className="flex items-center gap-1"><PlayCircle size={14} /> وصول مدى الحياة</div>
+                      </div>
+                      
+                      {/* زر الاشتراك (مؤقتاً يوجه للمكتبة، لاحقاً سنبرمج صفحة الشراء) */}
+<Link to={`/course/${course._id}`} className="block w-full bg-emerald-600/10 hover:bg-emerald-600 text-emerald-500 hover:text-white text-center font-bold py-3 rounded-xl transition-all border border-emerald-500/20 hover:border-emerald-500">
+  عرض التفاصيل
+</Link>
+                    </div>
+                  </div>
                 </div>
-              ))}
-            </div>
-            <div>
-              <p className="text-white font-bold text-sm">+500 مطور</p>
-              <p className="text-gray-500 text-xs">انضموا لمعسكراتنا المغلقة</p>
-            </div>
+              ))
+            ) : (
+              <div className="col-span-full text-center py-20 text-gray-500">
+                <BookOpen size={48} className="mx-auto mb-4 text-gray-700" />
+                <p>لا توجد كورسات تطابق بحثك حالياً.</p>
+              </div>
+            )}
           </div>
-          <button className="bg-gray-800 hover:bg-gray-700 text-white text-sm font-bold py-3 px-6 rounded-xl transition-all">
-            تصفح جميع التقييمات
-          </button>
-        </div>
-
+        )}
       </div>
     </div>
   );
