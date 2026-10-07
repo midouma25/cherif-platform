@@ -108,11 +108,14 @@ const CourseDetails = () => {
                   {lesson.description && <p className="text-gray-500 text-sm mt-1">{lesson.description}</p>}
                 </div>
                 
-                {/* أيقونات الحالة (مجاني أم مقفل) */}
+            {/* أيقونات الحالة (مجاني أم مقفل) */}
                 {lesson.isFreePreview ? (
-                  <div className="flex items-center gap-2 text-emerald-500 text-xs font-bold bg-emerald-900/20 px-3 py-1.5 rounded-lg border border-emerald-500/20 cursor-pointer hover:bg-emerald-600 hover:text-white transition-colors">
+                  <Link 
+                    to={`/course/${course._id}/learn`} 
+                    className="flex items-center gap-2 text-emerald-500 text-xs font-bold bg-emerald-900/20 px-3 py-1.5 rounded-lg border border-emerald-500/20 cursor-pointer hover:bg-emerald-600 hover:text-white transition-colors"
+                  >
                     <PlayCircle size={14} /> معاينة مجانية
-                  </div>
+                  </Link>
                 ) : (
                   <div className="text-gray-600 bg-gray-950 p-2 rounded-lg border border-gray-800" title="هذا الدرس مقفل. اشترك لمشاهدته.">
                     <Lock size={16} />

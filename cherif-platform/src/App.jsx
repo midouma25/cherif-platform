@@ -45,7 +45,7 @@ const App = () => {
               <Route path="/b2b" element={<B2B />} />
               <Route path="/login" element={<Auth />} />
               <Route path="/course/:id" element={<CourseDetails />} />
-              <Route path="/classroom/:id" element={<Classroom />} />
+              <Route path="/course/:id/learn" element={<Classroom />} />
               {/* مسارات محمية بصلاحيات (RBAC) */}
               <Route path="/hub" element={
                 <ProtectedRoute allowedRoles={['user', 'instructor', 'admin']}>

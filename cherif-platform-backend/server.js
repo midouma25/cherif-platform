@@ -374,7 +374,99 @@ app.post('/api/courses/:courseId/lessons', verifyInstructor, async (req, res) =>
     }
 });
 
+// ==========================================
+// 7. نموذج الاشتراكات وتتبع التقدم (Enrollment Schema)
+// ==========================================
+const enrollmentSchema = new mongoose.Schema({
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    courseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Course', required: true },
+    completedLessons: [{ type: String }], // مصفوفة لتخزين IDs الدروس المكتملة
+    enrolled_at: { type: Date, default: Date.now }
+});
 
+const Enrollment = mongoose.model('Enrollment', enrollmentSchema);
+
+// ==========================================
+// 🎮 مسارات نظام التقدم (Gamification APIs)
+// ==========================================
+
+// أ) جلب تقدم الطالب الحالي في الكورس
+app.get('/api/courses/:courseId/progress', async (req, res) => {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) return res.json({ success: true, completedLessons: [] }); // زائر غير مسجل
+
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const enrollment = await Enrollment.findOne({ userId: decoded.id, courseId: req.params.courseId });
+        res.json({ success: true, completedLessons: enrollment ? enrollment.completedLessons : [] });
+    } catch (error) {
+        res.status(500).json({ error: 'خطأ في جلب التقدم' });
+    }
+});
+
+// ب) زر "أنهيت الدرس" (حفظ تقدم الطالب)
+app.post('/api/courses/:courseId/complete-lesson', async (req, res) => {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) return res.status(401).json({ error: 'يجب تسجيل الدخول لحفظ تقدمك!' });
+
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const userId = decoded.id;
+        const { lessonId } = req.body;
+
+        // البحث عن اشتراك الطالب، وإن لم يوجد ننشئ له ملف اشتراك جديد
+        let enrollment = await Enrollment.findOne({ userId, courseId: req.params.courseId });
+        
+        if (!enrollment) {
+            enrollment = new Enrollment({ userId, courseId: req.params.courseId, completedLessons: [] });
+        }
+
+        // إذا لم يكن الدرس في قائمة المكتملة، أضفه!
+        if (!enrollment.completedLessons.includes(lessonId)) {
+            enrollment.completedLessons.push(lessonId);
+            await enrollment.save();
+        }
+
+        res.json({ success: true, completedLessons: enrollment.completedLessons });
+    } catch (error) {
+        console.error('❌ خطأ في حفظ التقدم:', error);
+        res.status(500).json({ error: 'خطأ في السيرفر' });
+    }
+});
+
+// ==========================================
+// 🎓 مسارات مكتبة الطالب (Student Hub)
+// ==========================================
+app.get('/api/user/my-learning', async (req, res) => {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) return res.status(401).json({ error: 'يجب تسجيل الدخول' });
+
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        
+        // جلب اشتراكات هذا الطالب ودمج بيانات الكورس معها
+        const enrollments = await Enrollment.find({ userId: decoded.id }).populate('courseId');
+
+        // نحسب نسبة التقدم لكل كورس بدقة
+        const learningData = await Promise.all(enrollments.map(async (enr) => {
+            if (!enr.courseId) return null; // تخطي إذا كان الكورس قد حُذف
+
+            const totalLessons = await Lesson.countDocuments({ courseId: enr.courseId._id });
+            return {
+                enrollmentId: enr._id,
+                course: enr.courseId,
+                progress: totalLessons > 0 ? Math.round((enr.completedLessons.length / totalLessons) * 100) : 0,
+                completedCount: enr.completedLessons.length,
+                totalLessons
+            };
+        }));
+
+        res.json({ success: true, learning: learningData.filter(item => item !== null) });
+    } catch (error) {
+        console.error('❌ خطأ في جلب المكتبة:', error);
+        res.status(500).json({ error: 'خطأ في السيرفر' });
+    }
+});
 
 
 // ==========================================

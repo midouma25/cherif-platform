@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
-import { AuthContext } from './AuthContext';
+import { AuthContext } from './context/AuthContext';
 import { PlayCircle, BookOpen, Trophy } from 'lucide-react';
 
 const Hub = () => {

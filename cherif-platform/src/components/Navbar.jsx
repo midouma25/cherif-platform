@@ -12,7 +12,9 @@ const Navbar = () => {
     { path: '/academy', name: 'الأكاديمية', icon: <Code size={18} /> },
     { path: '/vault', name: 'الخزنة السرية', icon: <Lock size={18} /> },
     { path: '/b2b', name: 'حلول الشركات', icon: <Briefcase size={18} /> },
-  ];
+    { path: '/hub', name: 'مكتبتي', icon: <BookOpen size={18} /> },
+
+];
 
   const handleLogout = () => {
     logout();
