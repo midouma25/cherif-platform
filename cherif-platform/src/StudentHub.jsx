@@ -1,5 +1,5 @@
 import React, { useContext } from 'react';
-import { AuthContext } from './context/AuthContext';
+import { AuthContext } from './AuthContext';
 import { BookOpen, Terminal, Download, Lock, ChevronLeft, ShieldCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
