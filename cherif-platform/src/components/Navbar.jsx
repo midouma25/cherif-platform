@@ -2,6 +2,8 @@ import React, { useContext } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Code, Briefcase, Lock, Terminal, User, LogOut , BookOpenText} from 'lucide-react';
 import { AuthContext } from '../AuthContext';
+import { Trophy } from 'lucide-react'; 
+
 
 const Navbar = () => {
   const location = useLocation();
@@ -13,6 +15,7 @@ const Navbar = () => {
     { path: '/vault', name: 'الخزنة السرية', icon: <Lock size={18} /> },
     { path: '/b2b', name: 'حلول الشركات', icon: <Briefcase size={18} /> },
     { path: '/hub', name: 'المستندات', icon: <BookOpenText size={18} /> },
+    { path: '/rankings', name: 'التصنيفات', icon: <Trophy size={18} /> },
 
 ];
 
@@ -40,6 +43,7 @@ const Navbar = () => {
             <Link key={link.path} to={link.path} className={`flex items-center gap-2 text-sm font-bold ${location.pathname.includes(link.path) ? 'text-emerald-400' : 'text-gray-400 hover:text-gray-200'}`}>
               {link.icon} {link.name}
             </Link>
+
           ))}
         </div>
 

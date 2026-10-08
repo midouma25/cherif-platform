@@ -10,9 +10,12 @@ import B2B from './B2B';
 import Academy from './Academy';
 import Auth from './Auth';
 import AdminDashboard from './AdminDashboard';
-import StudentHub from './StudentHub'; // تأكد من استيراد هذه إذا كنت تستخدمها
+import StudentHub from './StudentHub'; 
 import CourseDetails from './CourseDetails';
 import Classroom from './Classroom';
+import Rankings from './Rankings'; 
+import Certificate from './Certificate';
+
 
 // صفحة مؤقتة للرئيسية
 const Home = () => (
@@ -64,6 +67,8 @@ const App = () => {
                   <AdminDashboard />
                 </ProtectedRoute>
               } />
+              <Route path="/rankings" element={<Rankings />} />
+              <Route path="/certificate/:certId" element={<Certificate />} />
             </Routes>
           </main>
         </div>

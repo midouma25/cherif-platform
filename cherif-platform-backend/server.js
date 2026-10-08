@@ -4,6 +4,8 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
+const crypto = require('crypto');
+
 
 const app = express();
 app.use(express.json());
@@ -26,7 +28,9 @@ const userSchema = new mongoose.Schema({
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
     role: { type: String, enum: ['user', 'instructor', 'admin'], default: 'user' },
-    created_at: { type: Date, default: Date.now }
+    created_at: { type: Date, default: Date.now },
+    exp: { type: Number, default: 0 },
+    rank: { type: String, default: 'E-Rank' }
 });
 
 userSchema.pre('save', async function() {
@@ -378,11 +382,17 @@ app.post('/api/courses/:courseId/lessons', verifyInstructor, async (req, res) =>
 // 7. نموذج الاشتراكات وتتبع التقدم (Enrollment Schema)
 // ==========================================
 const enrollmentSchema = new mongoose.Schema({
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-    courseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Course', required: true },
-    completedLessons: [{ type: String }], // مصفوفة لتخزين IDs الدروس المكتملة
-    enrolled_at: { type: Date, default: Date.now }
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    courseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Course' },
+    completedLessons: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Lesson' }],
+    // 🆕 نظام الشهادات والتوثيق
+    certificate: {
+        isIssued: { type: Boolean, default: false },
+        certificateId: { type: String, sparse: true }, // رقم تسلسلي فريد
+        issuedAt: { type: Date }
+    }
 });
+
 
 const Enrollment = mongoose.model('Enrollment', enrollmentSchema);
 
@@ -441,16 +451,16 @@ app.get('/api/user/my-learning', async (req, res) => {
     const token = req.headers.authorization?.split(" ")[1];
     if (!token) return res.status(401).json({ error: 'يجب تسجيل الدخول' });
 
-    try {
+try {
         const decoded = jwt.verify(token, JWT_SECRET);
         
-        // جلب اشتراكات هذا الطالب ودمج بيانات الكورس معها
+        // 🆕 جلب بيانات اللاعب (الطالب)
+        const userStats = await User.findById(decoded.id).select('exp rank name');
+
         const enrollments = await Enrollment.find({ userId: decoded.id }).populate('courseId');
-
-        // نحسب نسبة التقدم لكل كورس بدقة
         const learningData = await Promise.all(enrollments.map(async (enr) => {
-            if (!enr.courseId) return null; // تخطي إذا كان الكورس قد حُذف
-
+            // ... (نفس كود حساب تقدم الكورسات الموجود لديك)
+            if (!enr.courseId) return null;
             const totalLessons = await Lesson.countDocuments({ courseId: enr.courseId._id });
             return {
                 enrollmentId: enr._id,
@@ -461,12 +471,14 @@ app.get('/api/user/my-learning', async (req, res) => {
             };
         }));
 
-        res.json({ success: true, learning: learningData.filter(item => item !== null) });
+        // 🆕 إرسال بيانات اللاعب مع بيانات الكورسات
+        res.json({ success: true, learning: learningData.filter(item => item !== null), userStats });
     } catch (error) {
-        console.error('❌ خطأ في جلب المكتبة:', error);
         res.status(500).json({ error: 'خطأ في السيرفر' });
     }
 });
+
+
 
 // جلب حالة اشتراك الطالب في كورس معين (هل يمتلك الكورس؟)
 app.get('/api/courses/:courseId/check-enrollment', async (req, res) => {
@@ -512,7 +524,173 @@ app.post('/api/courses/:courseId/enroll', async (req, res) => {
     }
 });
 
+// ب) زر "أنهيت الدرس" (حفظ تقدم الطالب وزيادة الـ EXP)
+app.post('/api/courses/:courseId/complete-lesson', async (req, res) => {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) return res.status(401).json({ error: 'يجب تسجيل الدخول' });
 
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const userId = decoded.id;
+        const { lessonId } = req.body;
+
+        let enrollment = await Enrollment.findOne({ userId, courseId: req.params.courseId });
+        if (!enrollment) {
+            enrollment = new Enrollment({ userId, courseId: req.params.courseId, completedLessons: [] });
+        }
+
+        let expGained = false; // للتأكد أن الطالب لن يأخذ نقاط على درس أنهاه سابقاً
+        let newRank = '';
+
+        if (!enrollment.completedLessons.includes(lessonId)) {
+            enrollment.completedLessons.push(lessonId);
+            await enrollment.save();
+            expGained = true;
+
+// 🆕 إضافة 50 EXP للمستخدم وتحديث رتبته (Solo Leveling / Monarch Logic)
+            const user = await User.findById(userId);
+            if (user) {
+                user.exp += 50;
+                
+                // التدرج الجديد المرعب
+                if (user.exp >= 50000) user.rank = 'Monarch';
+                else if (user.exp >= 15000) user.rank = 'National Level';
+                else if (user.exp >= 5000) user.rank = 'S-Rank';
+                else if (user.exp >= 2000) user.rank = 'A-Rank';
+                else if (user.exp >= 1000) user.rank = 'B-Rank';
+                else if (user.exp >= 500) user.rank = 'C-Rank';
+                else if (user.exp >= 200) user.rank = 'D-Rank';
+                else user.rank = 'E-Rank';
+                
+                newRank = user.rank;
+                await user.save();
+            }
+        }
+
+        res.json({ success: true, completedLessons: enrollment.completedLessons, expGained, newRank });
+    } catch (error) {
+        res.status(500).json({ error: 'خطأ في السيرفر' });
+    }
+});
+
+
+
+// ==========================================
+// 📊 مسارات لوحة تحكم الأستاذ (Instructor Dashboard)
+// ==========================================
+app.get('/api/instructor/stats', verifyInstructor, async (req, res) => {
+    try {
+        const instructorId = req.user.id;
+
+        // 1. جلب كل الكورسات الخاصة بك
+        const myCourses = await Course.find({ instructor: instructorId });
+        const courseIds = myCourses.map(c => c._id);
+
+        // 2. جلب كل الاشتراكات المرتبطة بكورساتك
+        const enrollments = await Enrollment.find({ courseId: { $in: courseIds } });
+
+        // 3. تحليل البيانات
+        const totalCourses = myCourses.length;
+        const totalStudents = enrollments.length; // عدد الاشتراكات الإجمالي
+        
+        // 4. حساب الأرباح (عدد المشتركين × سعر الكورس)
+        let totalRevenue = 0;
+        myCourses.forEach(course => {
+            const courseEnrollmentsCount = enrollments.filter(e => e.courseId.toString() === course._id.toString()).length;
+            totalRevenue += courseEnrollmentsCount * course.price;
+        });
+
+        res.json({ success: true, stats: { totalCourses, totalStudents, totalRevenue } });
+    } catch (error) {
+        console.error('❌ خطأ في جلب الإحصائيات:', error);
+        res.status(500).json({ error: 'فشل في جلب الإحصائيات' });
+    }
+});
+
+
+// ==========================================
+// 🏆 مسارات نقابة الصيادين (Leaderboard / Rankings)
+// ==========================================
+app.get('/api/leaderboard', async (req, res) => {
+    try {
+        // جلب أفضل 50 لاعباً مرتبين تنازلياً حسب نقاط الخبرة
+        const topPlayers = await User.find({})
+            .sort({ exp: -1 })
+            .limit(50)
+            .select('name exp rank'); // نجلب البيانات الآمنة فقط
+
+        res.json({ success: true, leaderboard: topPlayers });
+    } catch (error) {
+        console.error('❌ خطأ في جلب لوحة الصدارة:', error);
+        res.status(500).json({ error: 'فشل في تحميل بيانات النقابة' });
+    }
+});
+
+
+// ==========================================
+// 📜 مسارات وثائق الإثبات (Certificates)
+// ==========================================
+
+// 1. إصدار الشهادة للطالب (فقط إذا أكمل 100%)
+app.post('/api/courses/:courseId/issue-certificate', async (req, res) => {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) return res.status(401).json({ error: 'غير مصرح' });
+
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const enrollment = await Enrollment.findOne({ userId: decoded.id, courseId: req.params.courseId });
+        
+        if (!enrollment) return res.status(404).json({ error: 'لم يتم العثور على الاشتراك' });
+
+        const totalLessons = await Lesson.countDocuments({ courseId: req.params.courseId });
+        const progress = totalLessons > 0 ? (enrollment.completedLessons.length / totalLessons) * 100 : 0;
+
+        if (progress < 100) {
+            return res.status(400).json({ error: 'يجب إنهاء الكورس بالكامل لاستلام الشهادة' });
+        }
+
+        // إذا لم تكن مصدرة من قبل، قم بتوليدها
+        if (!enrollment.certificate.isIssued) {
+            // توليد رقم تسلسلي فخم مثل: CERT-A1B2C3D4
+            const uniqueId = 'CERT-' + crypto.randomBytes(4).toString('hex').toUpperCase();
+            
+            enrollment.certificate = {
+                isIssued: true,
+                certificateId: uniqueId,
+                issuedAt: new Date()
+            };
+            await enrollment.save();
+        }
+
+        res.json({ success: true, certificateId: enrollment.certificate.certificateId });
+    } catch (error) {
+        console.error('❌ خطأ في إصدار الشهادة:', error);
+        res.status(500).json({ error: 'خطأ في السيرفر' });
+    }
+});
+
+// 2. التحقق من الشهادة (مسار عام للشركات وأصحاب العمل)
+app.get('/api/certificates/verify/:certId', async (req, res) => {
+    try {
+        const enrollment = await Enrollment.findOne({ 'certificate.certificateId': req.params.certId })
+            .populate('userId', 'name')
+            .populate('courseId', 'title thumbnail');
+
+        if (!enrollment || !enrollment.certificate.isIssued) {
+            return res.json({ isValid: false });
+        }
+
+        res.json({
+            isValid: true,
+            studentName: enrollment.userId.name,
+            courseTitle: enrollment.courseId.title,
+            issueDate: enrollment.certificate.issuedAt,
+            certificateId: enrollment.certificate.certificateId
+        });
+    } catch (error) {
+        res.status(500).json({ error: 'خطأ في التحقق' });
+    }
+});
 
 // ==========================================
 // تشغيل السيرفر
