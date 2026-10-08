@@ -468,6 +468,51 @@ app.get('/api/user/my-learning', async (req, res) => {
     }
 });
 
+// جلب حالة اشتراك الطالب في كورس معين (هل يمتلك الكورس؟)
+app.get('/api/courses/:courseId/check-enrollment', async (req, res) => {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) return res.json({ isEnrolled: false });
+
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const enrollment = await Enrollment.findOne({ userId: decoded.id, courseId: req.params.courseId });
+        res.json({ isEnrolled: !!enrollment });
+    } catch (error) {
+        res.json({ isEnrolled: false });
+    }
+});
+
+// تسجيل الطالب في الكورس (شراء / اشتراك مجاني)
+app.post('/api/courses/:courseId/enroll', async (req, res) => {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) return res.status(401).json({ error: 'يجب تسجيل الدخول أولاً' });
+
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const userId = decoded.id;
+
+        // التأكد مما إذا كان مسجلاً بالفعل
+        const existingEnrollment = await Enrollment.findOne({ userId, courseId: req.params.courseId });
+        if (existingEnrollment) {
+            return res.json({ success: true, message: 'أنت مسجل بالفعل في هذا الكورس' });
+        }
+
+        // إنشاء اشتراك جديد
+        const newEnrollment = new Enrollment({
+            userId,
+            courseId: req.params.courseId,
+            completedLessons: []
+        });
+
+        await newEnrollment.save();
+        res.json({ success: true, message: 'تم الاشتراك بنجاح!' });
+    } catch (error) {
+        console.error('❌ خطأ في الاشتراك:', error);
+        res.status(500).json({ error: 'حدث خطأ أثناء الاشتراك' });
+    }
+});
+
+
 
 // ==========================================
 // تشغيل السيرفر

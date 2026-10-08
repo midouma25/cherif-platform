@@ -1,6 +1,6 @@
 import React, { useContext } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Code, Briefcase, Lock, Terminal, User, LogOut } from 'lucide-react';
+import { Code, Briefcase, Lock, Terminal, User, LogOut , BookOpenText} from 'lucide-react';
 import { AuthContext } from '../AuthContext';
 
 const Navbar = () => {
@@ -12,7 +12,7 @@ const Navbar = () => {
     { path: '/academy', name: 'الأكاديمية', icon: <Code size={18} /> },
     { path: '/vault', name: 'الخزنة السرية', icon: <Lock size={18} /> },
     { path: '/b2b', name: 'حلول الشركات', icon: <Briefcase size={18} /> },
-    { path: '/hub', name: 'مكتبتي', icon: <BookOpen size={18} /> },
+    { path: '/hub', name: 'المستندات', icon: <BookOpenText size={18} /> },
 
 ];
 

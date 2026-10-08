@@ -1,25 +1,32 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { PlayCircle, Clock, Award, Shield, BookOpen, ArrowRight, Lock, Video } from 'lucide-react';
 
 const CourseDetails = () => {
   const { id } = useParams();
-  const [course, setCourse] = useState(null);
+  const navigate = useNavigate();
+  const [isEnrolled, setIsEnrolled] = useState(false);
+  const [isEnrolling, setIsEnrolling] = useState(false);  const [course, setCourse] = useState(null);
   const [lessons, setLessons] = useState([]); // حالة جديدة لتخزين الدروس
   const [loading, setLoading] = useState(true);
 
+// تحديث الـ useEffect الأول ليتحقق أيضاً من اشتراك المستخدم
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // استخدمنا Promise.all لجلب الكورس والدروس في نفس اللحظة (لجعل الموقع سريعاً جداً)
-        const [courseRes, lessonsRes] = await Promise.all([
+        const token = localStorage.getItem('cherif_token');
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+        const [courseRes, lessonsRes, enrollRes] = await Promise.all([
           axios.get(`http://127.0.0.1:5001/api/courses/public/${id}`),
-          axios.get(`http://127.0.0.1:5001/api/courses/${id}/lessons`)
+          axios.get(`http://127.0.0.1:5001/api/courses/${id}/lessons`),
+          axios.get(`http://127.0.0.1:5001/api/courses/${id}/check-enrollment`, { headers }).catch(() => ({ data: { isEnrolled: false } }))
         ]);
         
         if (courseRes.data.success) setCourse(courseRes.data.course);
         if (lessonsRes.data.success) setLessons(lessonsRes.data.lessons);
+        if (enrollRes.data) setIsEnrolled(enrollRes.data.isEnrolled); // 🆕 تحديث حالة الاشتراك
         
       } catch (err) {
         console.error('خطأ في جلب البيانات', err);
@@ -29,6 +36,35 @@ const CourseDetails = () => {
     };
     fetchData();
   }, [id]);
+
+  // 🆕 دالة الاشتراك عند الضغط على الزر
+  const handleEnrollment = async () => {
+    const token = localStorage.getItem('cherif_token');
+    
+    // إذا لم يكن مسجلاً للدخول، نوجهه للخزنة
+    if (!token) {
+      alert("يجب عليك تسجيل الدخول من الخزنة السرية لتتمكن من الاشتراك!");
+      navigate('/auth'); // افترض أن مسار تسجيل الدخول هو /auth أو /vault
+      return;
+    }
+
+    setIsEnrolling(true);
+    try {
+      const res = await axios.post(`http://127.0.0.1:5001/api/courses/${id}/enroll`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (res.data.success) {
+        setIsEnrolled(true);
+        // توجيهه فوراً للمختبر التفاعلي (دوبامين لحظي!)
+        navigate(`/course/${id}/learn`);
+      }
+    } catch (error) {
+      alert("حدث خطأ أثناء الاشتراك.");
+    } finally {
+      setIsEnrolling(false);
+    }
+  };
 
   if (loading) return <div className="min-h-[80vh] flex justify-center items-center"><div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500"></div></div>;
   if (!course) return <div className="text-center py-20 text-white text-2xl font-bold">❌ الكورس غير موجود</div>;
@@ -65,10 +101,22 @@ const CourseDetails = () => {
             </div>
             <p className="text-gray-500 mb-8 font-bold text-sm">دفعة واحدة، بدون اشتراكات مخفية.</p>
             
-            <button className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 rounded-xl transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)] mb-4 flex justify-center items-center gap-2">
-              <PlayCircle size={20} /> اشترك الآن وابدأ التعلم
-            </button>
-            <p className="text-xs text-gray-500">الدفع آمن ومحمي بتشفير 256-bit.</p>
+          {isEnrolled ? (
+              <button onClick={() => navigate(`/course/${id}/learn`)} className="w-full bg-gray-800 hover:bg-gray-700 text-emerald-400 border border-emerald-500/30 font-black py-4 rounded-xl transition-all mb-4 flex justify-center items-center gap-2">
+                <PlayCircle size={20} /> متابعة التعلم (أنت مشترك)
+              </button>
+            ) : (
+              <button 
+                onClick={handleEnrollment} 
+                disabled={isEnrolling}
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 rounded-xl transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)] mb-4 flex justify-center items-center gap-2 disabled:opacity-50"
+              >
+                {isEnrolling ? 'جاري تجهيز مختبرك...' : (
+                  <><PlayCircle size={20} /> اشترك الآن وابدأ التعلم</>
+                )}
+              </button>
+            )}
+            <p className="text-xs text-gray-500">مدفوعات آمنة ومحمية بتشفير 256 بت.</p>
           </div>
         </div>
       </div>
