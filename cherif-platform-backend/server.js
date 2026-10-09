@@ -30,7 +30,13 @@ const userSchema = new mongoose.Schema({
     role: { type: String, enum: ['user', 'instructor', 'admin'], default: 'user' },
     created_at: { type: Date, default: Date.now },
     exp: { type: Number, default: 0 },
-    rank: { type: String, default: 'E-Rank' }
+    rank: { type: String, default: 'E-Rank' },
+    quiz: [{
+        question: String,
+        options: [String], // مصفوفة الخيارات (عادة 4 خيارات)
+        correctAnswerIndex: Number // رقم الخيار الصحيح (0, 1, 2, أو 3)
+    }],
+    section: { type: String, default: 'الوحدة 1: الأساسيات' }
 });
 
 userSchema.pre('save', async function() {
@@ -378,6 +384,18 @@ app.post('/api/courses/:courseId/lessons', verifyInstructor, async (req, res) =>
     }
 });
 
+
+// تحديث بيانات درس موجود
+app.put('/api/lessons/:lessonId', async (req, res) => {
+    try {
+        const updatedLesson = await Lesson.findByIdAndUpdate(req.params.lessonId, req.body, { new: true });
+        res.json({ success: true, lesson: updatedLesson });
+    } catch (error) {
+        res.status(500).json({ error: 'فشل في تحديث الدرس' });
+    }
+});
+
+
 // ==========================================
 // 7. نموذج الاشتراكات وتتبع التقدم (Enrollment Schema)
 // ==========================================
@@ -691,6 +709,32 @@ app.get('/api/certificates/verify/:certId', async (req, res) => {
         res.status(500).json({ error: 'خطأ في التحقق' });
     }
 });
+
+// ==========================================
+// 🛡️ مسارات ترقية اللاعبين (Role Upgrades)
+// ==========================================
+app.post('/api/user/become-instructor', async (req, res) => {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) return res.status(401).json({ error: 'يجب تسجيل الدخول' });
+
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const user = await User.findById(decoded.id);
+
+        if (!user) return res.status(404).json({ error: 'المستخدم غير موجود' });
+
+        // ترقية اللاعب إلى صانع محتوى (أستاذ)
+        user.role = 'instructor';
+        await user.save();
+
+        res.json({ success: true, message: 'تمت ترقيتك إلى رتبة صانع محتوى بنجاح!', newRole: user.role });
+    } catch (error) {
+        console.error('❌ خطأ في الترقية:', error);
+        res.status(500).json({ error: 'حدث خطأ في النظام' });
+    }
+});
+
+
 
 // ==========================================
 // تشغيل السيرفر
