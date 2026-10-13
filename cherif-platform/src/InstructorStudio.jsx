@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext, useRef } from 'react';
 import axios from 'axios';
 import { AuthContext } from './AuthContext';
 // 🆕 تم إضافة HelpCircle للاستيرادات لاستخدامها في زر الـ Quiz
-import { Video, PlusCircle, LayoutDashboard, Edit, Trash2, ListVideo, ArrowRight, BarChart3, Users, DollarSign, BookOpen, CheckCircle, ChevronRight, ChevronLeft, Play, Eye, FileText, Code, HelpCircle } from 'lucide-react';
+import { Video, PlusCircle, LayoutDashboard, Edit, Trash2, ListVideo, ArrowRight, BarChart3, Users, DollarSign, BookOpen, CheckCircle, ChevronRight, ChevronLeft, Play, Eye, FileText, Code, HelpCircle, UploadCloud } from 'lucide-react';
 
 const InstructorStudio = () => {
   const { user } = useContext(AuthContext);
@@ -24,13 +24,19 @@ const InstructorStudio = () => {
   const [activeSection, setActiveSection] = useState('الوحدة 1: الأساسيات');
   const [editingLessonId, setEditingLessonId] = useState(null);
   
-  // 🆕 تم تحديث الحالة المبدئية للدرس لتشمل مصفوفة quiz فارغة
+ // 🆕 تم تحديث الحالة لتشمل codeSnippet و quiz
   const [lessonForm, setLessonForm] = useState({ 
     title: '', description: '', content: '', videoUrl: '', order: 1, 
-    isFreePreview: false, section: 'الوحدة 1: الأساسيات', quiz: [] 
+    isFreePreview: false, section: 'الوحدة 1: الأساسيات', 
+    codeSnippet: '', // 👈 تمت الإضافة هنا
+    quiz: [] 
   });
 
   const contentTextareaRef = useRef(null);
+// 🆕 حالات الاستيراد السحري (AutoFactory Import)
+  const fileInputRef = useRef(null);
+  const [isImporting, setIsImporting] = useState(false);
+
 
   useEffect(() => {
     fetchStats();
@@ -139,16 +145,28 @@ const InstructorStudio = () => {
     }
   };
 
-  // 🆕 دوال إدارة واجهة الاختبار (تحديث السؤال، وتحديث الخيارات، وحذف سؤال)
+// 🆕 دوال إدارة واجهة الاختبار (تحديث السؤال، وتحديث الخيارات، وحذف سؤال)
   const handleQuizChange = (qIndex, field, value) => {
-    const updatedQuiz = [...lessonForm.quiz];
-    updatedQuiz[qIndex][field] = value;
+    const updatedQuiz = lessonForm.quiz.map((q, i) => {
+      if (i === qIndex) {
+        // التأكد من أن الإجابة الصحيحة تُحفظ كرقم رياضي وليس كنص
+        const finalValue = field === 'correctAnswerIndex' ? Number(value) : value;
+        return { ...q, [field]: finalValue };
+      }
+      return q;
+    });
     setLessonForm({ ...lessonForm, quiz: updatedQuiz });
   };
 
   const handleQuizOptionChange = (qIndex, optIndex, value) => {
-    const updatedQuiz = [...lessonForm.quiz];
-    updatedQuiz[qIndex].options[optIndex] = value;
+    const updatedQuiz = lessonForm.quiz.map((q, i) => {
+      if (i === qIndex) {
+        const newOptions = [...q.options];
+        newOptions[optIndex] = value;
+        return { ...q, options: newOptions };
+      }
+      return q;
+    });
     setLessonForm({ ...lessonForm, quiz: updatedQuiz });
   };
 
@@ -157,9 +175,14 @@ const InstructorStudio = () => {
     setLessonForm({ ...lessonForm, quiz: updatedQuiz });
   };
 
-  const resetLessonForm = (nextOrder = 1, section = activeSection) => {
+const resetLessonForm = (nextOrder = 1, section = activeSection) => {
     setEditingLessonId(null);
-    setLessonForm({ title: '', description: '', content: '', videoUrl: '', order: nextOrder, isFreePreview: false, section, quiz: [] });
+    setLessonForm({ 
+      title: '', description: '', content: '', videoUrl: '', order: nextOrder, 
+      isFreePreview: false, section, 
+      codeSnippet: '', // 👈 تمت الإضافة هنا
+      quiz: [] 
+    });
   };
 
   const handleSaveLesson = async (e) => {
@@ -185,6 +208,45 @@ const InstructorStudio = () => {
       fetchLessons(managingCourse._id);
     } catch (err) { alert('خطأ في حذف الدرس'); }
   };
+
+
+  // ==========================================
+  // 📥 استيراد الكورس من ملف JSON (من AutoFactory)
+  // ==========================================
+  const handleImportJSON = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        setIsImporting(true);
+        const courseData = JSON.parse(event.target.result); // تحويل الملف النصي إلى كائن برمجي
+
+        const token = localStorage.getItem('cherif_token');
+        
+        // إرسال الحزمة الضخمة إلى السيرفر الخاص بنا لفك تشفيرها وحفظها
+        const res = await axios.post('http://127.0.0.1:5001/api/courses/auto-import', courseData, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        if (res.data.success) {
+          alert('🎉 تم تفريغ الكورس السحري في قاعدة البيانات بنجاح!');
+          fetchMyCourses(); // تحديث قائمة الكورسات لتظهر فوراً
+          fetchStats();     // تحديث الإحصائيات (عدد الكورسات)
+        }
+      } catch (err) {
+        console.error(err);
+        alert('❌ فشل الاستيراد. تأكد من سيرفر المنصة أو من صلاحية ملف الـ JSON.');
+      } finally {
+        setIsImporting(false);
+        e.target.value = null; // تفريغ الحقل ليسمح برفع نفس الملف مجدداً إن لزم الأمر
+      }
+    };
+    reader.readAsText(file);
+  };
+
+
 
   return (
     <div className="min-h-screen py-10 px-6 animate-fade-in-up">
@@ -238,7 +300,32 @@ const InstructorStudio = () => {
             {/* 2️⃣ عرض الكورسات */}
             {activeTab === 'courses' && (
               <div className="animate-fade-in-up">
-                <h2 className="text-2xl font-black text-white mb-6 border-b border-gray-800 pb-4">المسارات المنشورة في النظام</h2>
+                <div className="flex justify-between items-center mb-6 border-b border-gray-800 pb-4">
+                <h2 className="text-2xl font-black text-white">المسارات المنشورة في النظام</h2>
+                
+                {/* 🆕 زر استيراد الـ JSON */}
+                <div>
+                  <input 
+                    type="file" 
+                    accept=".json" 
+                    ref={fileInputRef} 
+                    onChange={handleImportJSON} 
+                    className="hidden" 
+                  />
+                  <button 
+                    onClick={() => fileInputRef.current.click()} 
+                    disabled={isImporting}
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-5 rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.3)] transition-all flex items-center gap-2 text-sm disabled:opacity-50"
+                  >
+                    {isImporting ? (
+                      <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-white"></div>
+                    ) : (
+                      <UploadCloud size={18} />
+                    )}
+                    استيراد كورس سحري (JSON)
+                  </button>
+                </div>
+              </div>
                 {courses.length === 0 ? (
                   <div className="text-center py-20"><Video className="mx-auto text-gray-600 mb-4" size={48} /><p className="text-gray-400">لا توجد مسارات حالياً.</p></div>
                 ) : (
@@ -472,11 +559,16 @@ const InstructorStudio = () => {
                       <input id="videoUrlInput" type="text" placeholder="رابط YouTube أو MP4..." className="w-full bg-gray-950 border border-gray-800 text-white rounded-xl py-3 px-4 text-sm focus:border-blue-500 outline-none font-mono" value={lessonForm.videoUrl} onChange={(e) => setLessonForm({...lessonForm, videoUrl: e.target.value})} />
                     </div>
 
-                    <div className="bg-gray-900/50 border border-gray-800 p-5 rounded-2xl">
+<div className="bg-gray-900/50 border border-gray-800 p-5 rounded-2xl">
                       <label className="flex items-center gap-2 text-sm font-bold text-white mb-3">
-                        <FileText size={18} className="text-emerald-500" /> الشرح النصي والأكواد (يدعم Markdown)
+                        <Code size={18} className="text-yellow-500" /> الكود البرمجي (Code Snippet)
                       </label>
-                      <textarea ref={contentTextareaRef} placeholder="اكتب الشرح هنا... استخدم شريط الأدوات بالاعلى لحقن الأكواد الجاهزة." className="w-full bg-gray-950 border border-gray-800 text-white rounded-xl py-3 px-4 text-sm h-64 font-mono focus:border-emerald-500 outline-none resize-none leading-relaxed" value={lessonForm.content} onChange={(e) => setLessonForm({...lessonForm, content: e.target.value})}></textarea>
+                      <textarea 
+                        placeholder="اكتب الأكواد البرمجية هنا (سيتم عرضها بشكل مميز للطلاب)..." 
+                        className="w-full bg-gray-950 border border-gray-800 text-white rounded-xl py-3 px-4 text-sm h-32 font-mono focus:border-yellow-500 outline-none resize-none leading-relaxed" 
+                        value={lessonForm.codeSnippet || ""} // 👈 إضافة || "" للحماية
+                        onChange={(e) => setLessonForm({...lessonForm, codeSnippet: e.target.value})} 
+                      ></textarea>
                     </div>
 
                     {/* 🆕 باني الاختبارات (Quiz Builder UI) */}

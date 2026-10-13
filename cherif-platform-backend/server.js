@@ -8,8 +8,11 @@ const crypto = require('crypto');
 
 
 const app = express();
-app.use(express.json());
 app.use(cors());
+// السماح باستقبال حزم بيانات ضخمة (كورسات كاملة)
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
 
 // ==========================================
 // 1. الاتصال بقاعدة البيانات (MongoDB Atlas ☁️)
@@ -30,15 +33,8 @@ const userSchema = new mongoose.Schema({
     role: { type: String, enum: ['user', 'instructor', 'admin'], default: 'user' },
     created_at: { type: Date, default: Date.now },
     exp: { type: Number, default: 0 },
-    rank: { type: String, default: 'E-Rank' },
-    quiz: [{
-        question: String,
-        options: [String], // مصفوفة الخيارات (عادة 4 خيارات)
-        correctAnswerIndex: Number // رقم الخيار الصحيح (0, 1, 2, أو 3)
-    }],
-    section: { type: String, default: 'الوحدة 1: الأساسيات' }
+    rank: { type: String, default: 'E-Rank' }
 });
-
 userSchema.pre('save', async function() {
     if (!this.isModified('password')) return;
     const salt = await bcrypt.genSalt(10);
@@ -315,18 +311,38 @@ app.get('/api/courses/public/:id', async (req, res) => {
 // ==========================================
 // 6. نموذج الدروس (Lesson Schema)
 // ==========================================
+// ==========================================
+// 6. نموذج الدروس (Lesson Schema)
+// ==========================================
 const lessonSchema = new mongoose.Schema({
     title: { type: String, required: true },
     description: { type: String }, 
-    content: { type: String, default: '' }, // محتوى الـ Markdown
+    type: { type: String, default: 'video' }, // 🆕 'video' للدرس العادي، 'boss_quiz' لاختبار الزعيم
+    content: { type: String, default: '' }, 
     videoUrl: { type: String, default: '' }, 
     courseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Course', required: true },
     isFreePreview: { type: Boolean, default: false },
     order: { type: Number, default: 0 },
+    section: { type: String, default: 'الوحدة 1: الأساسيات' }, 
+    codeSnippet: { type: String, default: '' }, 
+    
+    // 🆕 الدرس العادي (Daily Quest)
+    dailyQuest: { 
+        question: String,
+        options: [String],
+        correctAnswerIndex: Number,
+        explanation: String // 🆕
+    },
+    bossQuiz: [{ 
+        question: String,
+        options: [String],
+        correctAnswerIndex: Number,
+        explanation: String // 🆕
+    }],
+
     created_at: { type: Date, default: Date.now }
 });
 
-// تعريف النموذج (يجب أن يكون هنا قبل المسارات)
 const Lesson = mongoose.model('Lesson', lessonSchema);
 
 
@@ -343,15 +359,20 @@ app.get('/api/courses/:courseId/lessons', async (req, res) => {
             _id: lesson._id,
             title: lesson.title,
             description: lesson.description,
+            type: lesson.type || 'video', // 🆕 إرسال نوع الدرس
             content: lesson.content,
             isFreePreview: lesson.isFreePreview,
             order: lesson.order,
-            videoUrl: lesson.isFreePreview ? lesson.videoUrl : null 
+            section: lesson.section || 'الوحدة 1: الأساسيات',
+            videoUrl: lesson.isFreePreview ? lesson.videoUrl : null,
+            codeSnippet: lesson.codeSnippet || "", 
+            dailyQuest: lesson.dailyQuest || null, // 🆕 إرسال المهمة اليومية (الكائن)
+            bossQuiz: (lesson.bossQuiz && lesson.bossQuiz.length > 0) ? lesson.bossQuiz : [] // 🆕 إرسال اختبار الزعيم (المصفوفة)
         }));
 
         res.json({ success: true, lessons: safeLessons });
     } catch (error) {
-        console.error('❌ خطأ في جلب الدروس:', error); // سيطبع الخطأ الحقيقي في التيرمينال
+        console.error('❌ خطأ في جلب الدروس:', error);
         res.status(500).json({ error: 'فشل في جلب الدروس' });
     }
 });
@@ -365,17 +386,22 @@ app.post('/api/courses/:courseId/lessons', verifyInstructor, async (req, res) =>
         if (course.instructor.toString() !== req.user.id && req.user.role !== 'admin') {
             return res.status(403).json({ error: 'غير مصرح لك' });
         }
+const newLesson = new Lesson({
+                        courseId: savedCourse._id,
+                        title: lesson.title,
+                        description: lesson.description || "تم إنشاؤه تلقائياً عبر AutoFactory",
+                        type: lesson.type || "video", // 🆕 حفظ نوع الدرس
+                        content: lesson.content || "",
+                        codeSnippet: lesson.codeSnippet || "",
+                        videoUrl: "", 
+                        order: lessonOrder++,
+                        isFreePreview: false,
+                        section: section.sectionName,
+                        dailyQuest: lesson.dailyQuest || null, // 🆕 حفظ المهمة اليومية (كائن)
+                        bossQuiz: (lesson.bossQuiz && lesson.bossQuiz.length > 0) ? lesson.bossQuiz : [] // 🆕 حفظ اختبار الزعيم (مصفوفة)
+                    });
 
-        const newLesson = new Lesson({
-            title: req.body.title,
-            description: req.body.description,
-            content: req.body.content,
-            videoUrl: req.body.videoUrl, 
-            order: req.body.order,
-            isFreePreview: req.body.isFreePreview,
-            courseId: req.params.courseId // تم تصحيح حرف P ليكون صغيراً
-        });
-
+                    
         await newLesson.save();
         res.json({ success: true, lesson: newLesson, message: 'تمت إضافة الدرس بنجاح' });
     } catch (error) {
@@ -734,6 +760,77 @@ app.post('/api/user/become-instructor', async (req, res) => {
     }
 });
 
+
+
+// ==========================================
+// 🚀 جسر الاستقبال التلقائي من (AutoFactory)
+// ==========================================
+app.post('/api/courses/auto-import', async (req, res) => {
+    const { courseTitle, courseDescription, difficulty, blueprint } = req.body;
+
+    if (!courseTitle || !blueprint) {
+        return res.status(400).json({ error: 'بيانات الكورس غير مكتملة!' });
+    }
+
+    try {
+        console.log(`\n📥 [استقبال آلي] جاري رفع كورس: ${courseTitle}`);
+
+        // 🛠️ الحل: البحث عن حسابك (أول حساب instructor أو admin في النظام)
+        // أو يمكنك استخدام إيميلك مباشرة: await User.findOne({ email: 'midouma25@gmail.com' });
+        const systemInstructor = await User.findOne({ role: { $in: ['instructor', 'admin'] } });
+        
+        if (!systemInstructor) {
+            return res.status(500).json({ error: 'لا يوجد حساب أستاذ في النظام لربط الكورس به!' });
+        }
+
+        console.log(`   🔗 سيتم ربط الكورس الآلي بالأستاذ: ${systemInstructor.name}`);
+
+        // 1. إنشاء الكورس الرئيسي
+        const newCourse = new Course({
+            title: courseTitle,
+            description: courseDescription,
+            price: 0,
+            thumbnail: "https://images.unsplash.com/photo-1633356122544-f134324a6cee?q=80&w=800",
+            // 🛠️ ربط الكورس بالـ ID الذي وجدناه
+            instructor: systemInstructor._id 
+        });
+        const savedCourse = await newCourse.save();
+        console.log(`   ✅ تم إنشاء الهيكل الأساسي (ID: ${savedCourse._id})`);
+
+// 2. معالجة وحفظ الدروس
+        let lessonOrder = 1;
+        for (const section of blueprint) {
+            for (const lesson of section.lessons) {
+                if (lesson.isForged) {
+                    const newLesson = new Lesson({
+                        courseId: savedCourse._id,
+                        title: lesson.title,
+                        description: lesson.description || "تم إنشاؤه تلقائياً عبر AutoFactory",
+                        type: lesson.type || "video", // حفظ نوع الدرس
+                        content: lesson.content || "",
+                        codeSnippet: lesson.codeSnippet || "",
+                        videoUrl: "", 
+                        order: lessonOrder++,
+                        isFreePreview: false,
+                        section: section.sectionName,
+                        
+                        // 💡 الحماية القصوى للمهام والاختبارات
+                        dailyQuest: lesson.dailyQuest && lesson.dailyQuest.question ? lesson.dailyQuest : null,
+                        bossQuiz: Array.isArray(lesson.bossQuiz) && lesson.bossQuiz.length > 0 ? lesson.bossQuiz : []
+                    });
+                    await newLesson.save();
+                }
+            }
+        }
+
+        console.log(`🎉 [نجاح] اكتمل رفع الكورس بالكامل إلى قاعدة البيانات!`);
+        res.json({ success: true, courseId: savedCourse._id, message: "تمت المزامنة بنجاح!" });
+
+    } catch (error) {
+        console.error('❌ خطأ في استيراد الكورس:', error);
+        res.status(500).json({ error: 'حدث خطأ داخلي أثناء استيراد الكورس.' });
+    }
+});
 
 
 // ==========================================
