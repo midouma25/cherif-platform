@@ -325,7 +325,21 @@ const lessonSchema = new mongoose.Schema({
     order: { type: Number, default: 0 },
     section: { type: String, default: 'الوحدة 1: الأساسيات' }, 
     codeSnippet: { type: String, default: '' }, 
-    
+    codeExplanation: { type: String, default: '' }, // 🆕 حقل تشريح الكود
+
+
+
+    // داخل lessonSchema في cherif-platform-backend/server.js:
+codingPractice: {
+  hasPractice: { type: Boolean, default: false },
+  taskQuestion: { type: String, default: '' },
+  starterCode: { type: String, default: '' },
+  hints: [{ type: String }],
+  solutionCode: { type: String, default: '' }
+},
+
+
+
     // 🆕 الدرس العادي (Daily Quest)
     dailyQuest: { 
         question: String,
@@ -366,7 +380,10 @@ app.get('/api/courses/:courseId/lessons', async (req, res) => {
             section: lesson.section || 'الوحدة 1: الأساسيات',
             videoUrl: lesson.isFreePreview ? lesson.videoUrl : null,
             codeSnippet: lesson.codeSnippet || "", 
-            dailyQuest: lesson.dailyQuest || null, // 🆕 إرسال المهمة اليومية (الكائن)
+            codeExplanation: lesson.codeExplanation || "", // 🆕 إرسال تشريح الكود
+            dailyQuest: lesson.dailyQuest || null, 
+            codingPractice: lesson.codingPractice || null,
+            // 🆕 إرسال المهمة اليومية (الكائن)
             bossQuiz: (lesson.bossQuiz && lesson.bossQuiz.length > 0) ? lesson.bossQuiz : [] // 🆕 إرسال اختبار الزعيم (المصفوفة)
         }));
 
@@ -809,11 +826,12 @@ app.post('/api/courses/auto-import', async (req, res) => {
                         type: lesson.type || "video", // حفظ نوع الدرس
                         content: lesson.content || "",
                         codeSnippet: lesson.codeSnippet || "",
+                        codeExplanation: lesson.codeExplanation || "", // 🆕                        
                         videoUrl: "", 
                         order: lessonOrder++,
                         isFreePreview: false,
                         section: section.sectionName,
-                        
+                        codingPractice: lesson.codingPractice || null,
                         // 💡 الحماية القصوى للمهام والاختبارات
                         dailyQuest: lesson.dailyQuest && lesson.dailyQuest.question ? lesson.dailyQuest : null,
                         bossQuiz: Array.isArray(lesson.bossQuiz) && lesson.bossQuiz.length > 0 ? lesson.bossQuiz : []

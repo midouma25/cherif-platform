@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useContext, useRef } from 'react';
 import axios from 'axios';
 import { AuthContext } from './AuthContext';
-// 🆕 تم إضافة HelpCircle للاستيرادات لاستخدامها في زر الـ Quiz
-import { Video, PlusCircle, LayoutDashboard, Edit, Trash2, ListVideo, ArrowRight, BarChart3, Users, DollarSign, BookOpen, CheckCircle, ChevronRight, ChevronLeft, Play, Eye, FileText, Code, HelpCircle, UploadCloud } from 'lucide-react';
+import { 
+  Video, PlusCircle, LayoutDashboard, Edit, Trash2, ListVideo, ArrowRight, 
+  BarChart3, Users, DollarSign, BookOpen, CheckCircle, ChevronRight, ChevronLeft, 
+  Play, Eye, FileText, Code, HelpCircle, UploadCloud, Microscope, Terminal, Lightbulb, Trophy
+} from 'lucide-react';
 
 const InstructorStudio = () => {
   const { user } = useContext(AuthContext);
@@ -24,19 +27,26 @@ const InstructorStudio = () => {
   const [activeSection, setActiveSection] = useState('الوحدة 1: الأساسيات');
   const [editingLessonId, setEditingLessonId] = useState(null);
   
- // 🆕 تم تحديث الحالة لتشمل codeSnippet و quiz
+  // 🆕 تحديث الحالة لتشمل تشريح الكود وتمرين كتابة الكود بالتلميحات ونوع الدرس
   const [lessonForm, setLessonForm] = useState({ 
     title: '', description: '', content: '', videoUrl: '', order: 1, 
+    type: 'video',
     isFreePreview: false, section: 'الوحدة 1: الأساسيات', 
-    codeSnippet: '', // 👈 تمت الإضافة هنا
+    codeSnippet: '',
+    codeExplanation: '',
+    codingPractice: {
+      hasPractice: false,
+      taskQuestion: '',
+      starterCode: '',
+      hints: ['', '', ''],
+      solutionCode: ''
+    },
     quiz: [] 
   });
 
   const contentTextareaRef = useRef(null);
-// 🆕 حالات الاستيراد السحري (AutoFactory Import)
   const fileInputRef = useRef(null);
   const [isImporting, setIsImporting] = useState(false);
-
 
   useEffect(() => {
     fetchStats();
@@ -122,11 +132,10 @@ const InstructorStudio = () => {
     }
   };
 
-  // 🆕 تم تعديل وظيفة شريط الأدوات للـ quiz لفتح واجهة الأسئلة بدلاً من حقن نص
   const insertElement = (type) => {
     let snippet = '';
     if (type === 'video') document.getElementById('videoUrlInput')?.focus();
-    if (type === 'article') snippet = '\n\n### عنوان فرعي جديد\nاكتب الشرح هنا...\n';
+    if (type === 'article') snippet = '\n\n### 🎯 عنوان فرعي جديد\n\nاكتب الشرح المبسط هنا...\n';
     if (type === 'code') snippet = '\n\n```javascript\n// اكتب الشفرة البرمجية هنا\nconst app = "CherifPlatform";\n```\n';
     
     if (type === 'quiz') {
@@ -134,22 +143,20 @@ const InstructorStudio = () => {
         ...prev,
         quiz: [...(prev.quiz || []), { question: '', options: ['', '', '', ''], correctAnswerIndex: 0 }]
       }));
-      return; // توقف هنا ولا تضف نصاً للـ textarea
+      return;
     }
 
     if (snippet) {
-      setLessonForm(prev => ({ ...prev, content: prev.content + snippet }));
+      setLessonForm(prev => ({ ...prev, content: (prev.content || '') + snippet }));
       if (contentTextareaRef.current) {
         contentTextareaRef.current.focus();
       }
     }
   };
 
-// 🆕 دوال إدارة واجهة الاختبار (تحديث السؤال، وتحديث الخيارات، وحذف سؤال)
   const handleQuizChange = (qIndex, field, value) => {
     const updatedQuiz = lessonForm.quiz.map((q, i) => {
       if (i === qIndex) {
-        // التأكد من أن الإجابة الصحيحة تُحفظ كرقم رياضي وليس كنص
         const finalValue = field === 'correctAnswerIndex' ? Number(value) : value;
         return { ...q, [field]: finalValue };
       }
@@ -175,12 +182,21 @@ const InstructorStudio = () => {
     setLessonForm({ ...lessonForm, quiz: updatedQuiz });
   };
 
-const resetLessonForm = (nextOrder = 1, section = activeSection) => {
+  const resetLessonForm = (nextOrder = 1, section = activeSection) => {
     setEditingLessonId(null);
     setLessonForm({ 
       title: '', description: '', content: '', videoUrl: '', order: nextOrder, 
+      type: 'video',
       isFreePreview: false, section, 
-      codeSnippet: '', // 👈 تمت الإضافة هنا
+      codeSnippet: '',
+      codeExplanation: '',
+      codingPractice: {
+        hasPractice: false,
+        taskQuestion: '',
+        starterCode: '',
+        hints: ['', '', ''],
+        solutionCode: ''
+      },
       quiz: [] 
     });
   };
@@ -209,9 +225,8 @@ const resetLessonForm = (nextOrder = 1, section = activeSection) => {
     } catch (err) { alert('خطأ في حذف الدرس'); }
   };
 
-
   // ==========================================
-  // 📥 استيراد الكورس من ملف JSON (من AutoFactory)
+  // 📥 استيراد الكورس أو الشهادة المهنية الكاملة من ملف JSON
   // ==========================================
   const handleImportJSON = (e) => {
     const file = e.target.files[0];
@@ -221,38 +236,64 @@ const resetLessonForm = (nextOrder = 1, section = activeSection) => {
     reader.onload = async (event) => {
       try {
         setIsImporting(true);
-        const courseData = JSON.parse(event.target.result); // تحويل الملف النصي إلى كائن برمجي
-
+        const parsedData = JSON.parse(event.target.result);
         const token = localStorage.getItem('cherif_token');
-        
-        // إرسال الحزمة الضخمة إلى السيرفر الخاص بنا لفك تشفيرها وحفظها
-        const res = await axios.post('http://127.0.0.1:5001/api/courses/auto-import', courseData, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
 
-        if (res.data.success) {
-          alert('🎉 تم تفريغ الكورس السحري في قاعدة البيانات بنجاح!');
-          fetchMyCourses(); // تحديث قائمة الكورسات لتظهر فوراً
-          fetchStats();     // تحديث الإحصائيات (عدد الكورسات)
+        // 1. إذا كان الملف عبارة عن "شهادة مهنية كاملة" تحتوي على مصفوفة courses
+        if (parsedData.isCertificateSeries && Array.isArray(parsedData.courses)) {
+          let importedCount = 0;
+          for (let i = 0; i < parsedData.courses.length; i++) {
+            const c = parsedData.courses[i];
+            if (!c.sections || c.sections.length === 0) continue;
+
+            await axios.post('http://127.0.0.1:5001/api/courses/auto-import', {
+              courseTitle: `${c.coursePrefix || `الكورس ${i + 1}`}: ${c.courseTitle}`,
+              courseDescription: `${c.courseDescription || c.description} | 🏆 يمنح: ${c.certificateBadge || 'شهادة إتمام'}`,
+              difficulty: c.difficultyLevel || 'كراش كورس مبسط (ELI5)',
+              blueprint: c.sections
+            }, { headers: { Authorization: `Bearer ${token}` } });
+            importedCount++;
+          }
+          alert(`🎉 تم استيراد (${importedCount}) كراش كورسات من الشهادة المهنية بنجاح!`);
+        } 
+        // 2. إذا كان الملف عبارة عن كراش كورس واحد مقتطع من الشهادة (يحتوي على sections)
+        else if (parsedData.sections && !parsedData.blueprint) {
+          await axios.post('http://127.0.0.1:5001/api/courses/auto-import', {
+            courseTitle: parsedData.courseTitle,
+            courseDescription: parsedData.courseDescription || parsedData.description,
+            difficulty: parsedData.difficultyLevel || 'كراش كورس مبسط (ELI5)',
+            blueprint: parsedData.sections
+          }, { headers: { Authorization: `Bearer ${token}` } });
+          alert('🎉 تم استيراد الكراش كورس بنجاح!');
         }
+        // 3. إذا كان كورساً قياسياً يحتوي على blueprint
+        else {
+          const res = await axios.post('http://127.0.0.1:5001/api/courses/auto-import', parsedData, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (res.data.success) {
+            alert('🎉 تم تفريغ الكورس السحري في قاعدة البيانات بنجاح!');
+          }
+        }
+
+        fetchMyCourses();
+        fetchStats();
       } catch (err) {
         console.error(err);
         alert('❌ فشل الاستيراد. تأكد من سيرفر المنصة أو من صلاحية ملف الـ JSON.');
       } finally {
         setIsImporting(false);
-        e.target.value = null; // تفريغ الحقل ليسمح برفع نفس الملف مجدداً إن لزم الأمر
+        e.target.value = null;
       }
     };
     reader.readAsText(file);
   };
 
-
-
   return (
     <div className="min-h-screen py-10 px-6 animate-fade-in-up">
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row gap-8">
         
-        {/* القائمة الجانبية (تعرض فقط خارج باني المنهج) */}
+        {/* القائمة الجانبية */}
         {activeTab !== 'curriculum' && (
           <div className="w-full md:w-64 bg-gray-900 border border-gray-800 rounded-3xl p-6 h-fit shrink-0">
             <h2 className="text-xl font-black text-white mb-6 flex items-center gap-2">
@@ -300,32 +341,31 @@ const resetLessonForm = (nextOrder = 1, section = activeSection) => {
             {/* 2️⃣ عرض الكورسات */}
             {activeTab === 'courses' && (
               <div className="animate-fade-in-up">
-                <div className="flex justify-between items-center mb-6 border-b border-gray-800 pb-4">
-                <h2 className="text-2xl font-black text-white">المسارات المنشورة في النظام</h2>
-                
-                {/* 🆕 زر استيراد الـ JSON */}
-                <div>
-                  <input 
-                    type="file" 
-                    accept=".json" 
-                    ref={fileInputRef} 
-                    onChange={handleImportJSON} 
-                    className="hidden" 
-                  />
-                  <button 
-                    onClick={() => fileInputRef.current.click()} 
-                    disabled={isImporting}
-                    className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-5 rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.3)] transition-all flex items-center gap-2 text-sm disabled:opacity-50"
-                  >
-                    {isImporting ? (
-                      <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-white"></div>
-                    ) : (
-                      <UploadCloud size={18} />
-                    )}
-                    استيراد كورس سحري (JSON)
-                  </button>
+                <div className="flex justify-between items-center mb-6 border-b border-gray-800 pb-4 flex-wrap gap-4">
+                  <h2 className="text-2xl font-black text-white">المسارات والشهادات المنشورة في النظام</h2>
+                  
+                  <div>
+                    <input 
+                      type="file" 
+                      accept=".json" 
+                      ref={fileInputRef} 
+                      onChange={handleImportJSON} 
+                      className="hidden" 
+                    />
+                    <button 
+                      onClick={() => fileInputRef.current.click()} 
+                      disabled={isImporting}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-5 rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.3)] transition-all flex items-center gap-2 text-sm disabled:opacity-50"
+                    >
+                      {isImporting ? (
+                        <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-white"></div>
+                      ) : (
+                        <UploadCloud size={18} />
+                      )}
+                      استيراد كورس أو شهادة مهنية (JSON)
+                    </button>
+                  </div>
                 </div>
-              </div>
                 {courses.length === 0 ? (
                   <div className="text-center py-20"><Video className="mx-auto text-gray-600 mb-4" size={48} /><p className="text-gray-400">لا توجد مسارات حالياً.</p></div>
                 ) : (
@@ -436,7 +476,7 @@ const resetLessonForm = (nextOrder = 1, section = activeSection) => {
           </div>
         )}
 
-        {/* 4️⃣ باني المناهج البصري المتقدم (The Master Forge) يغطي الشاشة */}
+        {/* 4️⃣ باني المناهج البصري المتقدم (The Master Forge) */}
         {activeTab === 'curriculum' && managingCourse && (
           <div className="fixed inset-0 z-50 bg-gray-950 flex flex-col animate-fade-in">
             
@@ -462,10 +502,9 @@ const resetLessonForm = (nextOrder = 1, section = activeSection) => {
               </div>
             </div>
 
-            {/* مساحة العمل ثلاثية الأبعاد */}
             <div className="flex-1 flex overflow-hidden">
               
-              {/* 1. العمود الأيمن: هيكل المنهج (الشجرة التفاعلية) */}
+              {/* 1. العمود الأيمن: هيكل المنهج */}
               <div className="w-80 bg-gray-900/50 border-l border-gray-800 flex flex-col shrink-0 overflow-y-auto">
                 <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-gray-900 sticky top-0 z-10">
                   <h3 className="text-sm font-bold text-white flex items-center gap-2">
@@ -490,8 +529,12 @@ const resetLessonForm = (nextOrder = 1, section = activeSection) => {
                           <div key={lesson._id} className={`mr-4 border p-3 rounded-xl flex items-center justify-between cursor-pointer transition-colors group ${editingLessonId === lesson._id ? 'bg-gray-800 border-purple-500' : 'bg-gray-950 border-gray-800 hover:border-purple-500/30'}`}>
                             <div className="flex items-center gap-3 overflow-hidden flex-1" onClick={() => { 
                                 setEditingLessonId(lesson._id); 
-                                // 🆕 جلب الاختبارات إن وجدت
-                                setLessonForm({ ...lesson, quiz: lesson.quiz || [] }); 
+                                setLessonForm({ 
+                                  ...lesson, 
+                                  codeExplanation: lesson.codeExplanation || '',
+                                  codingPractice: lesson.codingPractice || { hasPractice: false, taskQuestion: '', starterCode: '', hints: ['', '', ''], solutionCode: '' },
+                                  quiz: lesson.bossQuiz?.length > 0 ? lesson.bossQuiz : (lesson.quiz || [])
+                                }); 
                                 setActiveSection(lesson.section || sectionName); 
                               }}>
                               <span className="text-gray-500 font-black text-xs">{lesson.order}</span>
@@ -511,16 +554,29 @@ const resetLessonForm = (nextOrder = 1, section = activeSection) => {
                 </div>
               </div>
 
-              {/* 2. العمود الأوسط: محرر العناصر (The Editor) */}
+              {/* 2. العمود الأوسط: محرر العناصر الشامل */}
               <div className="flex-1 bg-[#0a0f16] flex flex-col overflow-y-auto">
                 <div className="max-w-3xl w-full mx-auto p-8 space-y-8">
                   
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between flex-wrap gap-3">
                     <h3 className="text-2xl font-black text-white">{editingLessonId ? 'تحرير الدرس المفتوح' : 'تهيئة درس جديد'}</h3>
-                    <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-emerald-400 bg-emerald-900/20 px-3 py-1.5 rounded-lg border border-emerald-500/30">
-                      <input type="checkbox" className="accent-emerald-500 rounded" checked={lessonForm.isFreePreview} onChange={(e) => setLessonForm({...lessonForm, isFreePreview: e.target.checked})} /> 
-                      متاح كمعاينة مجانية للمشاهدة
-                    </label>
+                    <div className="flex items-center gap-3">
+                      <select 
+                        value={lessonForm.type || 'video'} 
+                        onChange={(e) => setLessonForm({...lessonForm, type: e.target.value})}
+                        className="bg-gray-900 border border-gray-700 text-xs font-bold text-white rounded-lg px-3 py-2 outline-none"
+                      >
+                        <option value="video">📘 درس عادي (Video / Article)</option>
+                        <option value="boss_quiz">🐉 بوابة زعيم (Boss Dungeon)</option>
+                        <option value="red_gate">🔴 بوابة حمراء (Red Gate)</option>
+                        <option value="unit_exam">🏆 اختبار نهاية الوحدة (Unit Exam)</option>
+                      </select>
+
+                      <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-emerald-400 bg-emerald-900/20 px-3 py-2 rounded-lg border border-emerald-500/30">
+                        <input type="checkbox" className="accent-emerald-500 rounded" checked={lessonForm.isFreePreview} onChange={(e) => setLessonForm({...lessonForm, isFreePreview: e.target.checked})} /> 
+                        معاينة مجانية
+                      </label>
+                    </div>
                   </div>
 
                   <form onSubmit={handleSaveLesson} className="space-y-6">
@@ -546,32 +602,98 @@ const resetLessonForm = (nextOrder = 1, section = activeSection) => {
                       <button type="button" onClick={() => insertElement('code')} className="flex items-center gap-2 text-sm font-bold text-gray-300 hover:bg-gray-800 hover:text-white px-3 py-2 rounded-lg transition-colors">
                         <Code size={16} className="text-yellow-400" /> كود برمجي
                       </button>
-                      {/* 🆕 زر الاختبار المحدث */}
                       <button type="button" onClick={() => insertElement('quiz')} className="flex items-center gap-2 text-sm font-bold text-gray-300 hover:bg-purple-900/50 hover:text-purple-300 px-3 py-2 rounded-lg transition-colors border border-transparent hover:border-purple-500/50">
                         <HelpCircle size={16} className="text-purple-400" /> إضافة سؤال (Quiz)
                       </button>
                     </div>
 
+                    {/* 📝 حقل الشرح النظري والمقال (Markdown Content) */}
                     <div className="bg-gray-900/50 border border-gray-800 p-5 rounded-2xl">
                       <label className="flex items-center gap-2 text-sm font-bold text-white mb-3">
-                        <Video size={18} className="text-blue-500" /> مصدر الفيديو
-                      </label>
-                      <input id="videoUrlInput" type="text" placeholder="رابط YouTube أو MP4..." className="w-full bg-gray-950 border border-gray-800 text-white rounded-xl py-3 px-4 text-sm focus:border-blue-500 outline-none font-mono" value={lessonForm.videoUrl} onChange={(e) => setLessonForm({...lessonForm, videoUrl: e.target.value})} />
-                    </div>
-
-<div className="bg-gray-900/50 border border-gray-800 p-5 rounded-2xl">
-                      <label className="flex items-center gap-2 text-sm font-bold text-white mb-3">
-                        <Code size={18} className="text-yellow-500" /> الكود البرمجي (Code Snippet)
+                        <FileText size={18} className="text-emerald-500" /> الشرح النظري والمحتوى التفصيلي (Markdown)
                       </label>
                       <textarea 
-                        placeholder="اكتب الأكواد البرمجية هنا (سيتم عرضها بشكل مميز للطلاب)..." 
-                        className="w-full bg-gray-950 border border-gray-800 text-white rounded-xl py-3 px-4 text-sm h-32 font-mono focus:border-yellow-500 outline-none resize-none leading-relaxed" 
-                        value={lessonForm.codeSnippet || ""} // 👈 إضافة || "" للحماية
-                        onChange={(e) => setLessonForm({...lessonForm, codeSnippet: e.target.value})} 
+                        ref={contentTextareaRef}
+                        placeholder="اكتب شرح الدرس بصيغة Markdown هنا..." 
+                        className="w-full bg-gray-950 border border-gray-800 text-white rounded-xl py-3 px-4 text-sm h-56 font-mono focus:border-emerald-500 outline-none resize-y leading-relaxed" 
+                        value={lessonForm.content || ""} 
+                        onChange={(e) => setLessonForm({...lessonForm, content: e.target.value})} 
                       ></textarea>
                     </div>
 
-                    {/* 🆕 باني الاختبارات (Quiz Builder UI) */}
+                    <div className="bg-gray-900/50 border border-gray-800 p-5 rounded-2xl">
+                      <label className="flex items-center gap-2 text-sm font-bold text-white mb-3">
+                        <Video size={18} className="text-blue-500" /> مصدر الفيديو (اختياري)
+                      </label>
+                      <input id="videoUrlInput" type="text" placeholder="رابط YouTube أو MP4..." className="w-full bg-gray-950 border border-gray-800 text-white rounded-xl py-3 px-4 text-sm focus:border-blue-500 outline-none font-mono" value={lessonForm.videoUrl || ""} onChange={(e) => setLessonForm({...lessonForm, videoUrl: e.target.value})} />
+                    </div>
+
+                    <div className="bg-gray-900/50 border border-gray-800 p-5 rounded-2xl space-y-4">
+                      <div>
+                        <label className="flex items-center gap-2 text-sm font-bold text-white mb-3">
+                          <Code size={18} className="text-yellow-500" /> الكود البرمجي المرفق (Code Snippet)
+                        </label>
+                        <textarea 
+                          placeholder="اكتب الأكواد البرمجية هنا..." 
+                          className="w-full bg-gray-950 border border-gray-800 text-white rounded-xl py-3 px-4 text-sm h-32 font-mono focus:border-yellow-500 outline-none resize-none leading-relaxed" 
+                          value={lessonForm.codeSnippet || ""} 
+                          onChange={(e) => setLessonForm({...lessonForm, codeSnippet: e.target.value})} 
+                        ></textarea>
+                      </div>
+
+                      <div>
+                        <label className="flex items-center gap-2 text-sm font-bold text-indigo-400 mb-3">
+                          <Microscope size={18} /> تشريح الكود (Code Anatomy)
+                        </label>
+                        <textarea 
+                          placeholder="شرح الكود سطراً بسطر..." 
+                          className="w-full bg-gray-950 border border-gray-800 text-white rounded-xl py-3 px-4 text-sm h-28 font-mono focus:border-indigo-500 outline-none resize-none leading-relaxed" 
+                          value={lessonForm.codeExplanation || ""} 
+                          onChange={(e) => setLessonForm({...lessonForm, codeExplanation: e.target.value})} 
+                        ></textarea>
+                      </div>
+                    </div>
+
+                    {/* 🆕 إعدادات تمرين كتابة الكود التفاعلي مع التلميحات الثلاثة */}
+                    <div className="bg-indigo-950/15 border border-indigo-500/30 p-5 rounded-2xl space-y-4">
+                      <label className="flex items-center gap-2 text-sm font-black text-indigo-400">
+                        <Terminal size={18} /> تمرين كتابة الكود للطالب (مع زر التلميحات)
+                      </label>
+                      <input 
+                        type="text" 
+                        placeholder="المطلوب من الطالب كتابته (مثال: اكتب دالة تطبع مجموع رقمين)..." 
+                        className="w-full bg-gray-950 border border-gray-800 text-white rounded-xl py-2.5 px-4 text-sm outline-none"
+                        value={lessonForm.codingPractice?.taskQuestion || ''}
+                        onChange={(e) => setLessonForm({
+                          ...lessonForm, 
+                          codingPractice: { ...(lessonForm.codingPractice || {}), hasPractice: true, taskQuestion: e.target.value }
+                        })}
+                      />
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <textarea 
+                          placeholder="كود البداية (Starter Code)..." 
+                          className="bg-gray-950 border border-gray-800 text-emerald-300 rounded-xl p-3 text-xs font-mono h-24 outline-none"
+                          dir="ltr"
+                          value={lessonForm.codingPractice?.starterCode || ''}
+                          onChange={(e) => setLessonForm({
+                            ...lessonForm, 
+                            codingPractice: { ...(lessonForm.codingPractice || {}), starterCode: e.target.value }
+                          })}
+                        />
+                        <textarea 
+                          placeholder="الحل النموذجي (Solution Code)..." 
+                          className="bg-gray-950 border border-gray-800 text-amber-300 rounded-xl p-3 text-xs font-mono h-24 outline-none"
+                          dir="ltr"
+                          value={lessonForm.codingPractice?.solutionCode || ''}
+                          onChange={(e) => setLessonForm({
+                            ...lessonForm, 
+                            codingPractice: { ...(lessonForm.codingPractice || {}), solutionCode: e.target.value }
+                          })}
+                        />
+                      </div>
+                    </div>
+
+                    {/* باني الاختبارات (Quiz Builder UI) */}
                     {lessonForm.quiz && lessonForm.quiz.length > 0 && (
                       <div className="bg-purple-900/10 border border-purple-500/30 p-6 rounded-2xl space-y-6">
                         <div className="flex items-center justify-between border-b border-purple-500/20 pb-4">
@@ -622,7 +744,6 @@ const resetLessonForm = (nextOrder = 1, section = activeSection) => {
 
                 <div className="flex-1 p-6 overflow-y-auto">
                   
-                  {/* محاكاة مشغل الفيديو */}
                   <div className="w-full aspect-video bg-gray-900 rounded-xl border border-gray-800 flex flex-col items-center justify-center relative overflow-hidden mb-6 group">
                     {lessonForm.videoUrl ? (
                       <>
@@ -633,12 +754,11 @@ const resetLessonForm = (nextOrder = 1, section = activeSection) => {
                     ) : (
                       <div className="text-gray-600 flex flex-col items-center gap-2">
                         <Video size={32} />
-                        <span className="text-xs font-bold">لا يوجد فيديو</span>
+                        <span className="text-xs font-bold">درس تفاعلي مقروء / كودي</span>
                       </div>
                     )}
                   </div>
 
-                  {/* محاكاة العنوان والمحتوى */}
                   <h1 className="text-2xl font-black text-white mb-6 leading-tight">
                     {lessonForm.title || 'عنوان الدرس سيظهر هنا...'}
                   </h1>
@@ -646,12 +766,7 @@ const resetLessonForm = (nextOrder = 1, section = activeSection) => {
                   <div className="prose prose-invert prose-sm max-w-none mb-8">
                     {lessonForm.content ? (
                       <div className="text-gray-300 font-mono text-sm leading-relaxed whitespace-pre-wrap break-words">
-                        {lessonForm.content.split('```').map((block, index) => {
-                          if (index % 2 !== 0) {
-                            return <div key={index} className="bg-[#1e1e1e] p-4 my-4 rounded-xl border border-gray-700 text-emerald-400 font-mono text-xs overflow-x-auto shadow-inner">{block}</div>;
-                          }
-                          return <span key={index}>{block}</span>;
-                        })}
+                        {lessonForm.content}
                       </div>
                     ) : (
                       <div className="space-y-3 opacity-20">
@@ -661,11 +776,21 @@ const resetLessonForm = (nextOrder = 1, section = activeSection) => {
                       </div>
                     )}
                   </div>
+
+                  {lessonForm.codingPractice?.taskQuestion && (
+                    <div className="bg-indigo-950/20 border border-indigo-500/30 rounded-xl p-4 mb-6">
+                      <h4 className="text-xs font-black text-indigo-400 mb-2 flex items-center gap-1.5">
+                        <Terminal size={14}/> تمرين كتابة الكود للطالب
+                      </h4>
+                      <p className="text-xs text-white">{lessonForm.codingPractice.taskQuestion}</p>
+                    </div>
+                  )}
                   
-                  {/* 🆕 محاكاة واجهة الاختبار للطالب في المعاينة الحية */}
                   {lessonForm.quiz && lessonForm.quiz.length > 0 && (
                     <div className="border-t border-purple-900/50 pt-6 mt-6">
-                      <h3 className="text-lg font-black text-white mb-4 flex items-center gap-2"><CheckCircle className="text-purple-500" size="{20}"/> اختبار المهارات</h3>
+                      <h3 className="text-lg font-black text-white mb-4 flex items-center gap-2">
+                        <CheckCircle className="text-purple-500" size={20}/> اختبار المهارات
+                      </h3>
                       
                       {lessonForm.quiz.map((q, i) => (
                         <div key={i} className="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-4">
@@ -684,10 +809,9 @@ const resetLessonForm = (nextOrder = 1, section = activeSection) => {
                     </div>
                   )}
 
-                  {/* محاكاة زر إنهاء الدرس */}
                   <div className="mt-8 border-t border-gray-800 pt-6">
                     <div className="w-full bg-emerald-900/20 border border-emerald-500/30 text-emerald-500/50 py-3 rounded-xl font-bold flex justify-center items-center gap-2 text-sm cursor-not-allowed">
-                      <CheckCircle size="{16}"/> لقد أنهيت هذا الدرس (محاكاة)
+                      <CheckCircle size={16}/> لقد أنهيت هذا الدرس (محاكاة)
                     </div>
                   </div>
                   

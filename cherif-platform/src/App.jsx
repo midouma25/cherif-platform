@@ -15,7 +15,7 @@ import CourseDetails from './CourseDetails';
 import Classroom from './Classroom';
 import Rankings from './Rankings'; 
 import Certificate from './Certificate';
-
+import LandingPage from './LandingPage';
 
 // صفحة مؤقتة للرئيسية
 const Home = () => (
@@ -42,7 +42,7 @@ const App = () => {
           <main className="max-w-6xl mx-auto">
             <Routes>
               {/* مسارات عامة */}
-              <Route path="/" element={<Home />} />
+              <Route path="/" element={<LandingPage />} />
               <Route path="/vault" element={<Vault />} />
               <Route path="/academy" element={<Academy />} />
               <Route path="/b2b" element={<B2B />} />
