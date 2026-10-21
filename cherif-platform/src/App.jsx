@@ -27,32 +27,46 @@ const App = () => {
           هذا الكود يقوم بكسر قيود الشاشات الضيقة في جميع صفحات الموقع بضربة واحدة.
           سيحول أي حاوية مقيدة إلى حاوية سينمائية تستغل حواف الشاشة الكبيرة.
         */}
+{/* 
+          🎯 الحقنة المعمارية الشاملة (Fluid Edge-to-Edge Layout):
+          هذا الكود يكسر جميع القيود ويجعل الموقع يستغل 100% من عرض أي شاشة في العالم.
+        */}
         <style dangerouslySetInnerHTML={{__html: `
-          @media (min-width: 1024px) {
-            /* توسيع الحاويات في جميع الصفحات لتستغل مساحة الشاشة حتى 1536 بكسل (شاشات 2K) */
-            .max-w-5xl, .max-w-6xl, .max-w-9xl {
-              max-width: 1536px !important;
-              width: 100% !important;
+          /* تحويل جميع الحاويات الكبرى إلى حاويات مائعة (Fluid) بعرض 100% */
+          .max-w-5xl, .max-w-6xl, .max-w-7xl, .max-w-\\[1536px\\] {
+            max-width: 100% !important;
+            width: 100% !important;
+          }
+
+          /* 
+             هوامش تنفس ديناميكية أنيقة لكي لا تلتصق الكروت 
+             بحافة الشاشة البلاستيكية بشكل مزعج
+          */
+          @media (min-width: 768px) {
+            .max-w-5xl, .max-w-6xl, .max-w-7xl, .max-w-\\[1536px\\] {
               padding-left: 3rem !important;
               padding-right: 3rem !important;
             }
           }
           
-          @media (min-width: 1536px) {
-            /* للشاشات العملاقة جداً (4K)، نجعلها تستغل 90% من العرض الإجمالي */
-            .max-w-5xl, .max-w-6xl, .max-w-9xl {
-              max-width: 90vw !important;
-              padding-left: 4rem !important;
-              padding-right: 4rem !important;
+          @media (min-width: 1280px) {
+            .max-w-5xl, .max-w-6xl, .max-w-7xl, .max-w-\\[1536px\\] {
+              padding-left: 5rem !important;
+              padding-right: 5rem !important;
             }
           }
 
-          /* 
-            حماية النصوص من التمدد المفرط (Eye Comfort)
-            الشبكات والبطاقات ستتمدد للحواف، لكن النصوص ستبقى في عرض مريح للعين
-          */
+          @media (min-width: 1536px) {
+            /* للشاشات العملاقة جداً (Ultrawide) نزيد الهامش قليلاً للحفاظ على الفخامة */
+            .max-w-5xl, .max-w-6xl, .max-w-7xl, .max-w-\\[1536px\\] {
+              padding-left: 6rem !important;
+              padding-right: 6rem !important;
+            }
+          }
+
+          /* حماية النصوص فقط من التمدد اللانهائي الذي يرهق عين القارئ */
           p.leading-relaxed, p.leading-\\[1\\.9\\], p.leading-\\[1\\.85\\] {
-            max-width: 900px;
+            max-width: 1000px;
           }
         `}} />
 
