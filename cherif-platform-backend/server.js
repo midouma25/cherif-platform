@@ -6,13 +6,11 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 
-
 const app = express();
 app.use(cors());
-// السماح باستقبال حزم بيانات ضخمة (كورسات كاملة)
+// السماح باستقبال حزم بيانات ضخمة (كورسات وشهادات كاملة)
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
-
 
 // ==========================================
 // 1. الاتصال بقاعدة البيانات (MongoDB Atlas ☁️)
@@ -20,8 +18,157 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 const ATLAS_URI = process.env.MONGO_URI;
 
 mongoose.connect(ATLAS_URI)
-.then(() => console.log('✅ تم الاتصال بقاعدة بيانات Cherif Platform (أطلس السحابية ☁️)'))
-.catch(err => console.error('❌ خطأ في الاتصال بقاعدة أطلس:', err));
+    .then(() => console.log('✅ تم الاتصال بقاعدة بيانات Cherif Platform (أطلس السحابية ☁️)'))
+    .catch(err => console.error('❌ خطأ في الاتصال بقاعدة أطلس:', err));
+
+// ==========================================
+// 🧹 دوال التطهير الذكية (لمنع CastError وتكرار العناوين)
+// ==========================================
+
+// أ) تنظيف تكرار "الكراش كورس 1: كراش كورس 1:" من عنوان الكورس
+const cleanCourseTitlePrefix = (rawTitle = '') => {
+    if (!rawTitle || typeof rawTitle !== 'string') return 'كورس تدريبي';
+    return rawTitle
+        .replace(/^((?:الكراش كورس|كراش كورس|الكورس|المرحلة)\s*\d+(?:\s*\([^)]*\))?)\s*:\s*(?:الكراش كورس|كراش كورس|الكورس|المرحلة)\s*\d+\s*:\s*/i, '$1: ')
+        .replace(/^((?:الكراش كورس|كراش كورس|الكورس)\s*\d+)\s*:\s*(?:الكراش كورس|كراش كورس|الكورس)\s*\d+\s*[-:]?\s*/i, '$1: ')
+        .trim();
+};
+
+// ب) تحويل أي قيمة (سواء كانت نصاً، أو مصفوفة متداخلة [['...']]، أو كائناً) إلى نص صافي
+const toCleanFlatString = (val) => {
+    if (val === null || val === undefined) return '';
+    if (typeof val === 'string') {
+        const trimmed = val.trim();
+        // إذا كان النص عبارة عن مصفوفة JSON متداخلة كنص مثل "[ [ '/ˈtʃiːp.ər/' ] ]"
+        if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+            try {
+                const parsed = JSON.parse(trimmed.replace(/'/g, '"'));
+                if (Array.isArray(parsed)) {
+                    return parsed.flat(Infinity).map(item => String(item).trim()).filter(Boolean).join(' | ');
+                }
+            } catch (e) {}
+        }
+        return trimmed;
+    }
+    if (Array.isArray(val)) {
+        return val.flat(Infinity).map(toCleanFlatString).filter(Boolean).join(' | ');
+    }
+    if (typeof val === 'object') {
+        return String(val.text || val.option || val.value || val.label || JSON.stringify(val));
+    }
+    return String(val);
+};
+
+// ج) تطبيع مصفوفة الخيارات (options) لتكون دائماً [String] مسطحة ونظيفة 100%
+const normalizeQuizOptions = (rawOptions) => {
+    if (!rawOptions) return ['الخيار 1', 'الخيار 2', 'الخيار 3', 'الخيار 4'];
+
+    let workingArray = rawOptions;
+
+    // إذا جاءت الخيارات كنص JSON مضغوط مثل "[ [ '/ˈtʃiːp.ər/' ], [ '/tʃɪpər/' ] ]"
+    if (typeof workingArray === 'string') {
+        const trimmed = workingArray.trim();
+        if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+            try {
+                workingArray = JSON.parse(trimmed.replace(/'/g, '"'));
+            } catch (e) {
+                return [trimmed];
+            }
+        } else {
+            return [trimmed];
+        }
+    }
+
+    if (!Array.isArray(workingArray)) {
+        return ['الخيار 1', 'الخيار 2', 'الخيار 3', 'الخيار 4'];
+    }
+
+    // إذا كان العنصر الأول بحد ذاته مصفوفة تحتوي على جميع الخيارات الأربع: [ [ ['a'], ['b'], ['c'], ['d'] ] ]
+    if (workingArray.length === 1 && Array.isArray(workingArray[0]) && workingArray[0].length >= 2) {
+        workingArray = workingArray[0];
+    }
+
+    // إذا كان العنصر الأول نصاً يحتوي على المصفوفة كاملة: [ "[ [ '/ˈtʃiːp.ər/' ], [ '/tʃɪpər/' ] ]" ]
+    if (workingArray.length === 1 && typeof workingArray[0] === 'string' && workingArray[0].trim().startsWith('[')) {
+        try {
+            const parsedInner = JSON.parse(workingArray[0].trim().replace(/'/g, '"'));
+            if (Array.isArray(parsedInner) && parsedInner.length >= 2) {
+                workingArray = parsedInner;
+            }
+        } catch (e) {}
+    }
+
+    const flattened = workingArray.map(item => {
+        if (Array.isArray(item)) {
+            return item.flat(Infinity).map(x => String(x).trim()).filter(Boolean).join(' ');
+        }
+        return toCleanFlatString(item);
+    }).filter(Boolean);
+
+    return flattened.length > 0 ? flattened : ['الخيار 1', 'الخيار 2', 'الخيار 3', 'الخيار 4'];
+};
+
+// د) تطهير كائن الدرس بالكامل قبل حفظه في MongoDB
+const sanitizeLessonData = (lesson = {}, courseId, sectionName = 'الوحدة 1: الأساسيات', lessonOrder = 1) => {
+    // 1. تطهير bossQuiz
+    const cleanBossQuiz = Array.isArray(lesson.bossQuiz)
+        ? lesson.bossQuiz.map((q) => ({
+            questionType: q?.questionType === 'code' ? 'code' : 'theory',
+            question: toCleanFlatString(q?.question || 'سؤال تطبيقي'),
+            options: normalizeQuizOptions(q?.options),
+            correctAnswerIndex: Number.isFinite(Number(q?.correctAnswerIndex)) ? Number(q.correctAnswerIndex) : 0,
+            explanation: toCleanFlatString(q?.explanation || '')
+        }))
+        : [];
+
+    // 2. تطهير dailyQuest
+    const hasDailyQuest = lesson.dailyQuest && (lesson.dailyQuest.question || lesson.dailyQuest.options?.length);
+    const cleanDailyQuest = hasDailyQuest
+        ? {
+            question: toCleanFlatString(lesson.dailyQuest.question),
+            options: normalizeQuizOptions(lesson.dailyQuest.options),
+            correctAnswerIndex: Number.isFinite(Number(lesson.dailyQuest.correctAnswerIndex))
+                ? Number(lesson.dailyQuest.correctAnswerIndex)
+                : 0,
+            explanation: toCleanFlatString(lesson.dailyQuest.explanation || ''),
+            isMandatory: Boolean(lesson.dailyQuest.isMandatory),
+            bonusExp: Number(lesson.dailyQuest.bonusExp) || 50
+        }
+        : null;
+
+    // 3. تطهير codingPractice (أو unitCodingChallenge)
+    const rawPractice = lesson.codingPractice || lesson.unitCodingChallenge;
+    const hasPractice = rawPractice && (rawPractice.taskQuestion || rawPractice.solutionCode);
+    const cleanCodingPractice = hasPractice
+        ? {
+            hasPractice: true,
+            taskQuestion: toCleanFlatString(rawPractice.taskQuestion),
+            starterCode: toCleanFlatString(rawPractice.starterCode || ''),
+            hints: Array.isArray(rawPractice.hints)
+                ? rawPractice.hints.map(toCleanFlatString).filter(Boolean)
+                : [],
+            solutionCode: toCleanFlatString(rawPractice.solutionCode || '')
+        }
+        : null;
+
+    return {
+        courseId,
+        title: toCleanFlatString(lesson.title || `الدرس ${lessonOrder}`),
+        description: toCleanFlatString(lesson.description || 'تم إنشاؤه تلقائياً عبر AutoFactory'),
+        type: toCleanFlatString(lesson.type || 'video'),
+        lessonCategory: toCleanFlatString(lesson.lessonCategory || 'standard'),
+        content: toCleanFlatString(lesson.content || ''),
+        codeSnippet: toCleanFlatString(lesson.codeSnippet || ''),
+        codeExplanation: toCleanFlatString(lesson.codeExplanation || ''),
+        videoUrl: toCleanFlatString(lesson.videoUrl || ''),
+        order: lessonOrder,
+        isFreePreview: Boolean(lesson.isFreePreview),
+        section: toCleanFlatString(sectionName || lesson.section || 'الوحدة 1: الأساسيات'),
+        codingPractice: cleanCodingPractice,
+        dailyQuest: cleanDailyQuest,
+        bossQuiz: cleanBossQuiz
+    };
+};
 
 // ==========================================
 // 2. نموذج المستخدم (User Model)
@@ -35,7 +182,7 @@ const userSchema = new mongoose.Schema({
     exp: { type: Number, default: 0 },
     rank: { type: String, default: 'E-Rank' }
 });
-userSchema.pre('save', async function() {
+userSchema.pre('save', async function () {
     if (!this.isModified('password')) return;
     const salt = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
@@ -48,7 +195,6 @@ const JWT_SECRET = process.env.JWT_SECRET;
 // 3. مسارات المصادقة (Auth Routes)
 // ==========================================
 
-// أ) فحص هل الإيميل مسجل مسبقاً؟
 app.post('/api/auth/check-email', async (req, res) => {
     try {
         const user = await User.findOne({ email: req.body.email });
@@ -58,7 +204,6 @@ app.post('/api/auth/check-email', async (req, res) => {
     }
 });
 
-// ب) تسجيل مستخدم جديد عبر الخزنة (بكلمة المرور التي كتبها)
 app.post('/api/auth/vault-signup', async (req, res) => {
     const { name, email, password } = req.body;
 
@@ -68,7 +213,7 @@ app.post('/api/auth/vault-signup', async (req, res) => {
 
     try {
         let user = await User.findOne({ email });
-        
+
         if (user) {
             return res.status(400).json({ error: 'هذا البريد مسجل بالفعل، يرجى تسجيل الدخول.' });
         }
@@ -78,9 +223,9 @@ app.post('/api/auth/vault-signup', async (req, res) => {
 
         const token = jwt.sign({ id: user._id, role: user.role, name: user.name }, JWT_SECRET, { expiresIn: '7d' });
 
-        res.json({ 
-            success: true, 
-            token, 
+        res.json({
+            success: true,
+            token,
             user: { id: user._id, name: user.name, role: user.role, email: user.email },
             message: 'تم إنشاء الحساب بنجاح!'
         });
@@ -91,7 +236,6 @@ app.post('/api/auth/vault-signup', async (req, res) => {
     }
 });
 
-// ج) تسجيل الدخول الرسمي
 app.post('/api/auth/login', async (req, res) => {
     const { email, password } = req.body;
 
@@ -107,8 +251,8 @@ app.post('/api/auth/login', async (req, res) => {
         if (!isMatch) return res.status(400).json({ error: 'كلمة المرور غير صحيحة' });
 
         const token = jwt.sign(
-            { id: user._id, role: user.role, name: user.name }, 
-            JWT_SECRET, 
+            { id: user._id, role: user.role, name: user.name },
+            JWT_SECRET,
             { expiresIn: '7d' }
         );
 
@@ -166,11 +310,11 @@ app.put('/api/admin/users/:id/role', verifyAdmin, async (req, res) => {
 app.get('/api/make-me-admin/:email', async (req, res) => {
     try {
         const user = await User.findOneAndUpdate(
-            { email: req.params.email }, 
-            { role: 'admin' }, 
+            { email: req.params.email },
+            { role: 'admin' },
             { new: true }
         );
-        if(user) res.json({ success: true, message: 'مبروك! أصبحت المدير العام الآن. قم بتسجيل الدخول من جديد.' });
+        if (user) res.json({ success: true, message: 'مبروك! أصبحت المدير العام الآن. قم بتسجيل الدخول من جديد.' });
         else res.json({ error: 'لم يتم العثور على الإيميل' });
     } catch (error) { res.status(500).send('Error'); }
 });
@@ -181,17 +325,20 @@ app.get('/api/make-me-admin/:email', async (req, res) => {
 const courseSchema = new mongoose.Schema({
     title: { type: String, required: true },
     description: { type: String, required: true },
-    price: { type: Number, default: 0 }, // 0 تعني مجاني
-    thumbnail: { type: String, default: '' }, // صورة الغلاف
+    difficulty: { type: String, default: '' },
+    estimatedHours: { type: Number, default: 18 },
+    price: { type: Number, default: 0 },
+    thumbnail: { type: String, default: '' },
+    certificateMeta: { type: mongoose.Schema.Types.Mixed, default: {} },
     instructor: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-    isPublished: { type: Boolean, default: false }, // هل هو متاح للطلاب أم مسودة؟
+    isPublished: { type: Boolean, default: false },
     created_at: { type: Date, default: Date.now }
 });
 
 const Course = mongoose.model('Course', courseSchema);
 
 // ==========================================
-// 🛡️ حارس الأمان الخاص بالأساتذة (يسمح للأستاذ والمدير)
+// 🛡️ حارس الأمان الخاص بالأساتذة
 // ==========================================
 const verifyInstructor = (req, res, next) => {
     const token = req.headers.authorization?.split(" ")[1];
@@ -199,7 +346,6 @@ const verifyInstructor = (req, res, next) => {
 
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
-        // نسمح بالدخول إذا كان أستاذاً أو مديراً عاماً
         if (decoded.role !== 'instructor' && decoded.role !== 'admin') {
             return res.status(403).json({ error: 'هذا المسار مخصص للأساتذة فقط' });
         }
@@ -214,17 +360,19 @@ const verifyInstructor = (req, res, next) => {
 // 🎙️ مسارات استوديو الأستاذ (Instructor APIs)
 // ==========================================
 
-// أ) إنشاء كورس جديد
 app.post('/api/courses', verifyInstructor, async (req, res) => {
     try {
-        const { title, description, price, thumbnail } = req.body;
-        
+        const { title, description, price, thumbnail, difficulty, estimatedHours, certificateMeta } = req.body;
+
         const newCourse = new Course({
-            title,
+            title: cleanCourseTitlePrefix(title),
             description,
             price,
             thumbnail,
-            instructor: req.user.id // نأخذ الـ ID من التوكن تلقائياً
+            difficulty: difficulty || '',
+            estimatedHours: Number(estimatedHours) || 18,
+            certificateMeta: certificateMeta || {},
+            instructor: req.user.id
         });
 
         await newCourse.save();
@@ -234,7 +382,6 @@ app.post('/api/courses', verifyInstructor, async (req, res) => {
     }
 });
 
-// ب) جلب الكورسات الخاصة بهذا الأستاذ فقط
 app.get('/api/courses/my-courses', verifyInstructor, async (req, res) => {
     try {
         const courses = await Course.find({ instructor: req.user.id }).sort({ created_at: -1 });
@@ -244,13 +391,11 @@ app.get('/api/courses/my-courses', verifyInstructor, async (req, res) => {
     }
 });
 
-// ج) تعديل كورس موجود
 app.put('/api/courses/:id', verifyInstructor, async (req, res) => {
     try {
         const course = await Course.findById(req.params.id);
         if (!course) return res.status(404).json({ error: 'الكورس غير موجود' });
-        
-        // الأمان: التأكد أن من يعدل الكورس هو صاحبه (أو المدير)
+
         if (course.instructor.toString() !== req.user.id && req.user.role !== 'admin') {
             return res.status(403).json({ error: 'غير مصرح لك بتعديل هذا الكورس' });
         }
@@ -262,7 +407,6 @@ app.put('/api/courses/:id', verifyInstructor, async (req, res) => {
     }
 });
 
-// د) حذف كورس
 app.delete('/api/courses/:id', verifyInstructor, async (req, res) => {
     try {
         const course = await Course.findById(req.params.id);
@@ -272,22 +416,20 @@ app.delete('/api/courses/:id', verifyInstructor, async (req, res) => {
             return res.status(403).json({ error: 'غير مصرح لك بحذف هذا الكورس' });
         }
 
+        await Lesson.deleteMany({ courseId: req.params.id });
         await Course.findByIdAndDelete(req.params.id);
-        res.json({ success: true, message: 'تم حذف الكورس بنجاح' });
+        res.json({ success: true, message: 'تم حذف الكورس وجميع دروسه بنجاح' });
     } catch (error) {
         res.status(500).json({ error: 'فشل في حذف الكورس' });
     }
 });
 
-
 // ==========================================
 // 🌍 مسارات الأكاديمية العامة (Public APIs)
 // ==========================================
 
-// جلب كل الكورسات (للجمهور والزوار)
 app.get('/api/courses/public', async (req, res) => {
     try {
-        // نجلب كل الكورسات ونرتبها من الأحدث للأقدم
         const courses = await Course.find().sort({ created_at: -1 });
         res.json({ success: true, courses });
     } catch (error) {
@@ -295,8 +437,6 @@ app.get('/api/courses/public', async (req, res) => {
     }
 });
 
-
-// جلب كورس واحد بالتفصيل (للجمهور)
 app.get('/api/courses/public/:id', async (req, res) => {
     try {
         const course = await Course.findById(req.params.id);
@@ -307,51 +447,46 @@ app.get('/api/courses/public/:id', async (req, res) => {
     }
 });
 
-
-// ==========================================
-// 6. نموذج الدروس (Lesson Schema)
-// ==========================================
 // ==========================================
 // 6. نموذج الدروس (Lesson Schema)
 // ==========================================
 const lessonSchema = new mongoose.Schema({
     title: { type: String, required: true },
-    description: { type: String }, 
-    type: { type: String, default: 'video' }, // 🆕 'video' للدرس العادي، 'boss_quiz' لاختبار الزعيم
-    content: { type: String, default: '' }, 
-    videoUrl: { type: String, default: '' }, 
+    description: { type: String },
+    type: { type: String, default: 'video' },
+    lessonCategory: { type: String, default: 'standard' },
+    content: { type: String, default: '' },
+    videoUrl: { type: String, default: '' },
     courseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Course', required: true },
     isFreePreview: { type: Boolean, default: false },
     order: { type: Number, default: 0 },
-    section: { type: String, default: 'الوحدة 1: الأساسيات' }, 
-    codeSnippet: { type: String, default: '' }, 
-    codeExplanation: { type: String, default: '' }, // 🆕 حقل تشريح الكود
+    section: { type: String, default: 'الوحدة 1: الأساسيات' },
+    codeSnippet: { type: String, default: '' },
+    codeExplanation: { type: String, default: '' },
 
-
-
-    // داخل lessonSchema في cherif-platform-backend/server.js:
-codingPractice: {
-  hasPractice: { type: Boolean, default: false },
-  taskQuestion: { type: String, default: '' },
-  starterCode: { type: String, default: '' },
-  hints: [{ type: String }],
-  solutionCode: { type: String, default: '' }
-},
-
-
-
-    // 🆕 الدرس العادي (Daily Quest)
-    dailyQuest: { 
-        question: String,
-        options: [String],
-        correctAnswerIndex: Number,
-        explanation: String // 🆕
+    codingPractice: {
+        hasPractice: { type: Boolean, default: false },
+        taskQuestion: { type: String, default: '' },
+        starterCode: { type: String, default: '' },
+        hints: [{ type: String }],
+        solutionCode: { type: String, default: '' }
     },
-    bossQuiz: [{ 
+
+    dailyQuest: {
         question: String,
         options: [String],
         correctAnswerIndex: Number,
-        explanation: String // 🆕
+        explanation: String,
+        isMandatory: { type: Boolean, default: false },
+        bonusExp: { type: Number, default: 50 }
+    },
+
+    bossQuiz: [{
+        questionType: { type: String, default: 'theory' },
+        question: String,
+        options: [String],
+        correctAnswerIndex: Number,
+        explanation: String
     }],
 
     created_at: { type: Date, default: Date.now }
@@ -359,32 +494,30 @@ codingPractice: {
 
 const Lesson = mongoose.model('Lesson', lessonSchema);
 
-
 // ==========================================
 // 📚 مسارات الدروس (Lesson APIs)
 // ==========================================
 
-// أ) جلب الدروس (مسار عام)
 app.get('/api/courses/:courseId/lessons', async (req, res) => {
     try {
         const lessons = await Lesson.find({ courseId: req.params.courseId }).sort({ order: 1 });
-        
+
         const safeLessons = lessons.map(lesson => ({
             _id: lesson._id,
             title: lesson.title,
             description: lesson.description,
-            type: lesson.type || 'video', // 🆕 إرسال نوع الدرس
+            type: lesson.type || 'video',
+            lessonCategory: lesson.lessonCategory || 'standard',
             content: lesson.content,
             isFreePreview: lesson.isFreePreview,
             order: lesson.order,
             section: lesson.section || 'الوحدة 1: الأساسيات',
             videoUrl: lesson.isFreePreview ? lesson.videoUrl : null,
-            codeSnippet: lesson.codeSnippet || "", 
-            codeExplanation: lesson.codeExplanation || "", // 🆕 إرسال تشريح الكود
-            dailyQuest: lesson.dailyQuest || null, 
+            codeSnippet: lesson.codeSnippet || "",
+            codeExplanation: lesson.codeExplanation || "",
+            dailyQuest: lesson.dailyQuest || null,
             codingPractice: lesson.codingPractice || null,
-            // 🆕 إرسال المهمة اليومية (الكائن)
-            bossQuiz: (lesson.bossQuiz && lesson.bossQuiz.length > 0) ? lesson.bossQuiz : [] // 🆕 إرسال اختبار الزعيم (المصفوفة)
+            bossQuiz: (lesson.bossQuiz && lesson.bossQuiz.length > 0) ? lesson.bossQuiz : []
         }));
 
         res.json({ success: true, lessons: safeLessons });
@@ -394,32 +527,26 @@ app.get('/api/courses/:courseId/lessons', async (req, res) => {
     }
 });
 
-// ب) إضافة درس جديد (مسار محمي للأستاذ)
 app.post('/api/courses/:courseId/lessons', verifyInstructor, async (req, res) => {
     try {
         const course = await Course.findById(req.params.courseId);
         if (!course) return res.status(404).json({ error: 'الكورس غير موجود' });
-        
+
         if (course.instructor.toString() !== req.user.id && req.user.role !== 'admin') {
             return res.status(403).json({ error: 'غير مصرح لك' });
         }
-const newLesson = new Lesson({
-                        courseId: savedCourse._id,
-                        title: lesson.title,
-                        description: lesson.description || "تم إنشاؤه تلقائياً عبر AutoFactory",
-                        type: lesson.type || "video", // 🆕 حفظ نوع الدرس
-                        content: lesson.content || "",
-                        codeSnippet: lesson.codeSnippet || "",
-                        videoUrl: "", 
-                        order: lessonOrder++,
-                        isFreePreview: false,
-                        section: section.sectionName,
-                        dailyQuest: lesson.dailyQuest || null, // 🆕 حفظ المهمة اليومية (كائن)
-                        bossQuiz: (lesson.bossQuiz && lesson.bossQuiz.length > 0) ? lesson.bossQuiz : [] // 🆕 حفظ اختبار الزعيم (مصفوفة)
-                    });
 
-                    
+        const existingCount = await Lesson.countDocuments({ courseId: course._id });
+        const cleanPayload = sanitizeLessonData(
+            req.body,
+            course._id,
+            req.body.section || 'الوحدة 1: الأساسيات',
+            req.body.order || (existingCount + 1)
+        );
+
+        const newLesson = new Lesson(cleanPayload);
         await newLesson.save();
+
         res.json({ success: true, lesson: newLesson, message: 'تمت إضافة الدرس بنجاح' });
     } catch (error) {
         console.error('❌ خطأ في إضافة الدرس:', error);
@@ -427,8 +554,6 @@ const newLesson = new Lesson({
     }
 });
 
-
-// تحديث بيانات درس موجود
 app.put('/api/lessons/:lessonId', async (req, res) => {
     try {
         const updatedLesson = await Lesson.findByIdAndUpdate(req.params.lessonId, req.body, { new: true });
@@ -438,7 +563,6 @@ app.put('/api/lessons/:lessonId', async (req, res) => {
     }
 });
 
-
 // ==========================================
 // 7. نموذج الاشتراكات وتتبع التقدم (Enrollment Schema)
 // ==========================================
@@ -446,25 +570,22 @@ const enrollmentSchema = new mongoose.Schema({
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     courseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Course' },
     completedLessons: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Lesson' }],
-    // 🆕 نظام الشهادات والتوثيق
     certificate: {
         isIssued: { type: Boolean, default: false },
-        certificateId: { type: String, sparse: true }, // رقم تسلسلي فريد
+        certificateId: { type: String, sparse: true },
         issuedAt: { type: Date }
     }
 });
 
-
 const Enrollment = mongoose.model('Enrollment', enrollmentSchema);
 
 // ==========================================
-// 🎮 مسارات نظام التقدم (Gamification APIs)
+// 🎮 مسارات نظام التقدم والـ EXP (Gamification APIs)
 // ==========================================
 
-// أ) جلب تقدم الطالب الحالي في الكورس
 app.get('/api/courses/:courseId/progress', async (req, res) => {
     const token = req.headers.authorization?.split(" ")[1];
-    if (!token) return res.json({ success: true, completedLessons: [] }); // زائر غير مسجل
+    if (!token) return res.json({ success: true, completedLessons: [] });
 
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
@@ -475,7 +596,7 @@ app.get('/api/courses/:courseId/progress', async (req, res) => {
     }
 });
 
-// ب) زر "أنهيت الدرس" (حفظ تقدم الطالب)
+// مسار موحد لإنهاء الدرس + إضافة 50 EXP + ترقية الرتبة
 app.post('/api/courses/:courseId/complete-lesson', async (req, res) => {
     const token = req.headers.authorization?.split(" ")[1];
     if (!token) return res.status(401).json({ error: 'يجب تسجيل الدخول لحفظ تقدمك!' });
@@ -485,20 +606,38 @@ app.post('/api/courses/:courseId/complete-lesson', async (req, res) => {
         const userId = decoded.id;
         const { lessonId } = req.body;
 
-        // البحث عن اشتراك الطالب، وإن لم يوجد ننشئ له ملف اشتراك جديد
         let enrollment = await Enrollment.findOne({ userId, courseId: req.params.courseId });
-        
         if (!enrollment) {
             enrollment = new Enrollment({ userId, courseId: req.params.courseId, completedLessons: [] });
         }
 
-        // إذا لم يكن الدرس في قائمة المكتملة، أضفه!
+        let expGained = false;
+        let newRank = '';
+
         if (!enrollment.completedLessons.includes(lessonId)) {
             enrollment.completedLessons.push(lessonId);
             await enrollment.save();
+            expGained = true;
+
+            const user = await User.findById(userId);
+            if (user) {
+                user.exp += 50;
+
+                if (user.exp >= 50000) user.rank = 'Monarch';
+                else if (user.exp >= 15000) user.rank = 'National Level';
+                else if (user.exp >= 5000) user.rank = 'S-Rank';
+                else if (user.exp >= 2000) user.rank = 'A-Rank';
+                else if (user.exp >= 1000) user.rank = 'B-Rank';
+                else if (user.exp >= 500) user.rank = 'C-Rank';
+                else if (user.exp >= 200) user.rank = 'D-Rank';
+                else user.rank = 'E-Rank';
+
+                newRank = user.rank;
+                await user.save();
+            }
         }
 
-        res.json({ success: true, completedLessons: enrollment.completedLessons });
+        res.json({ success: true, completedLessons: enrollment.completedLessons, expGained, newRank });
     } catch (error) {
         console.error('❌ خطأ في حفظ التقدم:', error);
         res.status(500).json({ error: 'خطأ في السيرفر' });
@@ -512,15 +651,12 @@ app.get('/api/user/my-learning', async (req, res) => {
     const token = req.headers.authorization?.split(" ")[1];
     if (!token) return res.status(401).json({ error: 'يجب تسجيل الدخول' });
 
-try {
+    try {
         const decoded = jwt.verify(token, JWT_SECRET);
-        
-        // 🆕 جلب بيانات اللاعب (الطالب)
         const userStats = await User.findById(decoded.id).select('exp rank name');
 
         const enrollments = await Enrollment.find({ userId: decoded.id }).populate('courseId');
         const learningData = await Promise.all(enrollments.map(async (enr) => {
-            // ... (نفس كود حساب تقدم الكورسات الموجود لديك)
             if (!enr.courseId) return null;
             const totalLessons = await Lesson.countDocuments({ courseId: enr.courseId._id });
             return {
@@ -532,16 +668,12 @@ try {
             };
         }));
 
-        // 🆕 إرسال بيانات اللاعب مع بيانات الكورسات
         res.json({ success: true, learning: learningData.filter(item => item !== null), userStats });
     } catch (error) {
         res.status(500).json({ error: 'خطأ في السيرفر' });
     }
 });
 
-
-
-// جلب حالة اشتراك الطالب في كورس معين (هل يمتلك الكورس؟)
 app.get('/api/courses/:courseId/check-enrollment', async (req, res) => {
     const token = req.headers.authorization?.split(" ")[1];
     if (!token) return res.json({ isEnrolled: false });
@@ -555,7 +687,6 @@ app.get('/api/courses/:courseId/check-enrollment', async (req, res) => {
     }
 });
 
-// تسجيل الطالب في الكورس (شراء / اشتراك مجاني)
 app.post('/api/courses/:courseId/enroll', async (req, res) => {
     const token = req.headers.authorization?.split(" ")[1];
     if (!token) return res.status(401).json({ error: 'يجب تسجيل الدخول أولاً' });
@@ -564,13 +695,11 @@ app.post('/api/courses/:courseId/enroll', async (req, res) => {
         const decoded = jwt.verify(token, JWT_SECRET);
         const userId = decoded.id;
 
-        // التأكد مما إذا كان مسجلاً بالفعل
         const existingEnrollment = await Enrollment.findOne({ userId, courseId: req.params.courseId });
         if (existingEnrollment) {
             return res.json({ success: true, message: 'أنت مسجل بالفعل في هذا الكورس' });
         }
 
-        // إنشاء اشتراك جديد
         const newEnrollment = new Enrollment({
             userId,
             courseId: req.params.courseId,
@@ -585,76 +714,19 @@ app.post('/api/courses/:courseId/enroll', async (req, res) => {
     }
 });
 
-// ب) زر "أنهيت الدرس" (حفظ تقدم الطالب وزيادة الـ EXP)
-app.post('/api/courses/:courseId/complete-lesson', async (req, res) => {
-    const token = req.headers.authorization?.split(" ")[1];
-    if (!token) return res.status(401).json({ error: 'يجب تسجيل الدخول' });
-
-    try {
-        const decoded = jwt.verify(token, JWT_SECRET);
-        const userId = decoded.id;
-        const { lessonId } = req.body;
-
-        let enrollment = await Enrollment.findOne({ userId, courseId: req.params.courseId });
-        if (!enrollment) {
-            enrollment = new Enrollment({ userId, courseId: req.params.courseId, completedLessons: [] });
-        }
-
-        let expGained = false; // للتأكد أن الطالب لن يأخذ نقاط على درس أنهاه سابقاً
-        let newRank = '';
-
-        if (!enrollment.completedLessons.includes(lessonId)) {
-            enrollment.completedLessons.push(lessonId);
-            await enrollment.save();
-            expGained = true;
-
-// 🆕 إضافة 50 EXP للمستخدم وتحديث رتبته (Solo Leveling / Monarch Logic)
-            const user = await User.findById(userId);
-            if (user) {
-                user.exp += 50;
-                
-                // التدرج الجديد المرعب
-                if (user.exp >= 50000) user.rank = 'Monarch';
-                else if (user.exp >= 15000) user.rank = 'National Level';
-                else if (user.exp >= 5000) user.rank = 'S-Rank';
-                else if (user.exp >= 2000) user.rank = 'A-Rank';
-                else if (user.exp >= 1000) user.rank = 'B-Rank';
-                else if (user.exp >= 500) user.rank = 'C-Rank';
-                else if (user.exp >= 200) user.rank = 'D-Rank';
-                else user.rank = 'E-Rank';
-                
-                newRank = user.rank;
-                await user.save();
-            }
-        }
-
-        res.json({ success: true, completedLessons: enrollment.completedLessons, expGained, newRank });
-    } catch (error) {
-        res.status(500).json({ error: 'خطأ في السيرفر' });
-    }
-});
-
-
-
 // ==========================================
 // 📊 مسارات لوحة تحكم الأستاذ (Instructor Dashboard)
 // ==========================================
 app.get('/api/instructor/stats', verifyInstructor, async (req, res) => {
     try {
         const instructorId = req.user.id;
-
-        // 1. جلب كل الكورسات الخاصة بك
         const myCourses = await Course.find({ instructor: instructorId });
         const courseIds = myCourses.map(c => c._id);
-
-        // 2. جلب كل الاشتراكات المرتبطة بكورساتك
         const enrollments = await Enrollment.find({ courseId: { $in: courseIds } });
 
-        // 3. تحليل البيانات
         const totalCourses = myCourses.length;
-        const totalStudents = enrollments.length; // عدد الاشتراكات الإجمالي
-        
-        // 4. حساب الأرباح (عدد المشتركين × سعر الكورس)
+        const totalStudents = enrollments.length;
+
         let totalRevenue = 0;
         myCourses.forEach(course => {
             const courseEnrollmentsCount = enrollments.filter(e => e.courseId.toString() === course._id.toString()).length;
@@ -668,17 +740,15 @@ app.get('/api/instructor/stats', verifyInstructor, async (req, res) => {
     }
 });
 
-
 // ==========================================
 // 🏆 مسارات نقابة الصيادين (Leaderboard / Rankings)
 // ==========================================
 app.get('/api/leaderboard', async (req, res) => {
     try {
-        // جلب أفضل 50 لاعباً مرتبين تنازلياً حسب نقاط الخبرة
         const topPlayers = await User.find({})
             .sort({ exp: -1 })
             .limit(50)
-            .select('name exp rank'); // نجلب البيانات الآمنة فقط
+            .select('name exp rank');
 
         res.json({ success: true, leaderboard: topPlayers });
     } catch (error) {
@@ -687,20 +757,17 @@ app.get('/api/leaderboard', async (req, res) => {
     }
 });
 
-
 // ==========================================
 // 📜 مسارات وثائق الإثبات (Certificates)
 // ==========================================
-
-// 1. إصدار الشهادة للطالب (فقط إذا أكمل 100%)
-app.post('/api/courses/:courseId/issue-certificate', async (req, res) => {
+const handleIssueCertificate = async (req, res) => {
     const token = req.headers.authorization?.split(" ")[1];
     if (!token) return res.status(401).json({ error: 'غير مصرح' });
 
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         const enrollment = await Enrollment.findOne({ userId: decoded.id, courseId: req.params.courseId });
-        
+
         if (!enrollment) return res.status(404).json({ error: 'لم يتم العثور على الاشتراك' });
 
         const totalLessons = await Lesson.countDocuments({ courseId: req.params.courseId });
@@ -710,11 +777,9 @@ app.post('/api/courses/:courseId/issue-certificate', async (req, res) => {
             return res.status(400).json({ error: 'يجب إنهاء الكورس بالكامل لاستلام الشهادة' });
         }
 
-        // إذا لم تكن مصدرة من قبل، قم بتوليدها
         if (!enrollment.certificate.isIssued) {
-            // توليد رقم تسلسلي فخم مثل: CERT-A1B2C3D4
             const uniqueId = 'CERT-' + crypto.randomBytes(4).toString('hex').toUpperCase();
-            
+
             enrollment.certificate = {
                 isIssued: true,
                 certificateId: uniqueId,
@@ -728,9 +793,11 @@ app.post('/api/courses/:courseId/issue-certificate', async (req, res) => {
         console.error('❌ خطأ في إصدار الشهادة:', error);
         res.status(500).json({ error: 'خطأ في السيرفر' });
     }
-});
+};
 
-// 2. التحقق من الشهادة (مسار عام للشركات وأصحاب العمل)
+app.post('/api/courses/:courseId/issue-certificate', handleIssueCertificate);
+app.post('/api/certificates/issue/:courseId', handleIssueCertificate);
+
 app.get('/api/certificates/verify/:certId', async (req, res) => {
     try {
         const enrollment = await Enrollment.findOne({ 'certificate.certificateId': req.params.certId })
@@ -766,7 +833,6 @@ app.post('/api/user/become-instructor', async (req, res) => {
 
         if (!user) return res.status(404).json({ error: 'المستخدم غير موجود' });
 
-        // ترقية اللاعب إلى صانع محتوى (أستاذ)
         user.role = 'instructor';
         await user.save();
 
@@ -777,79 +843,106 @@ app.post('/api/user/become-instructor', async (req, res) => {
     }
 });
 
-
-
 // ==========================================
-// 🚀 جسر الاستقبال التلقائي من (AutoFactory)
+// 🚀 جسر الاستقبال التلقائي المحصن من (AutoFactory)
+// يدعم التطهير التلقائي للمصفوفات المتداخلة + منع تكرار الكورسات عند إعادة الرفع!
 // ==========================================
 app.post('/api/courses/auto-import', async (req, res) => {
-    const { courseTitle, courseDescription, difficulty, blueprint } = req.body;
+    const {
+        courseTitle,
+        courseDescription,
+        difficulty,
+        estimatedHours,
+        certificateMeta,
+        blueprint
+    } = req.body;
 
     if (!courseTitle || !blueprint) {
         return res.status(400).json({ error: 'بيانات الكورس غير مكتملة!' });
     }
 
     try {
-        console.log(`\n📥 [استقبال آلي] جاري رفع كورس: ${courseTitle}`);
+        const cleanedTitle = cleanCourseTitlePrefix(courseTitle);
+        console.log(`\n📥 [استقبال آلي] جاري رفع/تحديث كورس: ${cleanedTitle}`);
 
-        // 🛠️ الحل: البحث عن حسابك (أول حساب instructor أو admin في النظام)
-        // أو يمكنك استخدام إيميلك مباشرة: await User.findOne({ email: 'midouma25@gmail.com' });
         const systemInstructor = await User.findOne({ role: { $in: ['instructor', 'admin'] } });
-        
         if (!systemInstructor) {
             return res.status(500).json({ error: 'لا يوجد حساب أستاذ في النظام لربط الكورس به!' });
         }
 
         console.log(`   🔗 سيتم ربط الكورس الآلي بالأستاذ: ${systemInstructor.name}`);
 
-        // 1. إنشاء الكورس الرئيسي
-        const newCourse = new Course({
-            title: courseTitle,
-            description: courseDescription,
-            price: 0,
-            thumbnail: "https://images.unsplash.com/photo-1633356122544-f134324a6cee?q=80&w=800",
-            // 🛠️ ربط الكورس بالـ ID الذي وجدناه
-            instructor: systemInstructor._id 
+        // 🛡️ فحص ذكي لمنع تكرار الكورسات إذا تم رفع نفس الشهادة مرة ثانية:
+        // نبحث عن الكورس سواء بعنوانه النظيف أو عنوانه القديم المكرر
+        let targetCourse = await Course.findOne({
+            $or: [
+                { title: cleanedTitle },
+                { title: courseTitle }
+            ]
         });
-        const savedCourse = await newCourse.save();
-        console.log(`   ✅ تم إنشاء الهيكل الأساسي (ID: ${savedCourse._id})`);
 
-// 2. معالجة وحفظ الدروس
+        const parsedHours = parseInt(String(estimatedHours || '18').match(/\d+/)?.[0] || '18', 10);
+
+        if (targetCourse) {
+            targetCourse.title = cleanedTitle;
+            targetCourse.description = courseDescription || targetCourse.description;
+            targetCourse.difficulty = difficulty || targetCourse.difficulty || '';
+            targetCourse.estimatedHours = parsedHours;
+            targetCourse.certificateMeta = certificateMeta || targetCourse.certificateMeta || {};
+            await targetCourse.save();
+
+            // مسح الدروس الجزئية القديمة لإعادة كتابتها بشكل نظيف وكامل
+            await Lesson.deleteMany({ courseId: targetCourse._id });
+            console.log(`   🔄 تم العثور على الكورس مسبقاً وتحديث هيكله (ID: ${targetCourse._id}) بدون تكرار!`);
+        } else {
+            targetCourse = new Course({
+                title: cleanedTitle,
+                description: courseDescription || cleanedTitle,
+                difficulty: difficulty || '',
+                estimatedHours: parsedHours,
+                price: 0,
+                thumbnail: "https://images.unsplash.com/photo-1633356122544-f134324a6cee?q=80&w=800",
+                certificateMeta: certificateMeta || {},
+                instructor: systemInstructor._id,
+                isPublished: true
+            });
+            await targetCourse.save();
+            console.log(`   ✅ تم إنشاء الهيكل الأساسي الجديد (ID: ${targetCourse._id})`);
+        }
+
+        // 2. تطهير ومعالجة وحفظ جميع الدروس
         let lessonOrder = 1;
-        for (const section of blueprint) {
-            for (const lesson of section.lessons) {
-                if (lesson.isForged) {
-                    const newLesson = new Lesson({
-                        courseId: savedCourse._id,
-                        title: lesson.title,
-                        description: lesson.description || "تم إنشاؤه تلقائياً عبر AutoFactory",
-                        type: lesson.type || "video", // حفظ نوع الدرس
-                        content: lesson.content || "",
-                        codeSnippet: lesson.codeSnippet || "",
-                        codeExplanation: lesson.codeExplanation || "", // 🆕                        
-                        videoUrl: "", 
-                        order: lessonOrder++,
-                        isFreePreview: false,
-                        section: section.sectionName,
-                        codingPractice: lesson.codingPractice || null,
-                        // 💡 الحماية القصوى للمهام والاختبارات
-                        dailyQuest: lesson.dailyQuest && lesson.dailyQuest.question ? lesson.dailyQuest : null,
-                        bossQuiz: Array.isArray(lesson.bossQuiz) && lesson.bossQuiz.length > 0 ? lesson.bossQuiz : []
-                    });
-                    await newLesson.save();
+        const lessonsToInsert = [];
+
+        for (const section of (Array.isArray(blueprint) ? blueprint : [])) {
+            const secName = section?.sectionName || 'الوحدة 1: الأساسيات';
+            const rawLessons = Array.isArray(section?.lessons) ? section.lessons : [];
+
+            for (const lesson of rawLessons) {
+                if (lesson && (lesson.isForged || lesson.content || lesson.bossQuiz?.length)) {
+                    const sanitized = sanitizeLessonData(lesson, targetCourse._id, secName, lessonOrder++);
+                    lessonsToInsert.push(sanitized);
                 }
             }
         }
 
-        console.log(`🎉 [نجاح] اكتمل رفع الكورس بالكامل إلى قاعدة البيانات!`);
-        res.json({ success: true, courseId: savedCourse._id, message: "تمت المزامنة بنجاح!" });
+        if (lessonsToInsert.length > 0) {
+            await Lesson.insertMany(lessonsToInsert);
+        }
+
+        console.log(`🎉 [نجاح] اكتمل رفع الكورس (${lessonsToInsert.length} درساً وتحدياً) بالكامل إلى قاعدة البيانات!`);
+        res.json({
+            success: true,
+            courseId: targetCourse._id,
+            lessonsCount: lessonsToInsert.length,
+            message: "تمت المزامنة بنجاح!"
+        });
 
     } catch (error) {
         console.error('❌ خطأ في استيراد الكورس:', error);
-        res.status(500).json({ error: 'حدث خطأ داخلي أثناء استيراد الكورس.' });
+        res.status(500).json({ error: 'حدث خطأ داخلي أثناء استيراد الكورس: ' + error.message });
     }
 });
-
 
 // ==========================================
 // تشغيل السيرفر
