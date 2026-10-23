@@ -14,35 +14,84 @@ import {
 } from 'lucide-react';
 
 // ============================================================================
-// 🎨 0. قاموس الصور الذهنية التلقائي (Visual Emoji Anchors)
+// 🎨 0. قاموس الصور الذهنية التلقائي متعدد اللغات (Visual Emoji Anchors)
 // ============================================================================
 const WORD_EMOJI_MAP = {
+  // English
   cat: '🐱', dog: '🐕', bug: '🐞', ant: '🐜', fish: '🐟', owl: '🦉', pet: '🐾', rat: '🐭', bat: '🦇',
   apple: '🍎', egg: '🥚', cup: '☕', mug: '🍺', pot: '🍲', pan: '🍳', dish: '🍽️', chip: '🍟',
   sun: '☀️', hot: '🔥', bed: '🛏️', cot: '🛌', mat: '🧶', box: '📦', bin: '🗑️',
   pen: '🖊️', pin: '📌', net: '🕸️', bag: '🎒', hat: '🎩', red: '🔴',
   ship: '🚢', shop: '🏪', path: '🛣️', log: '🪵',
-  man: '👨', chin: '🧔', run: '🏃', sit: '🪑', chat: '💬', math: '🔢', thin: '📏', big: '🐘',
-  eat: '🍽️', drink: '🥤', sleep: '😴', walk: '🚶'
+  man: '👨', chin: '🧔', run: '🏃', sit: '🪑', chat: '🐱', math: '🔢', thin: '📏', big: '🐘',
+  eat: '🍽️', drink: '🥤', sleep: '😴', walk: '🚶',
+  // French (Français)
+  chien: '🐕', oiseau: '🐦', poisson: '🐟', cheval: '🐴',
+  pomme: '🍎', pain: '🥖', croissant: '🥐', eau: '💧', café: '☕', lait: '🥛', fromage: '🧀',
+  lit: '🛏️', table: '🪑', chaise: '🪑', maison: '🏠', école: '🏫', porte: '🚪', fenêtre: '🪟',
+  livre: '📖', stylo: '🖊️', sac: '🎒', chapeau: '🎩', voiture: '🚗', bateau: '⛵', train: '🚆',
+  soleil: '☀️', lune: '🌙', feu: '🔥', fleur: '🌸', arbre: '🌳', jardin: '🏡',
+  garçon: '👦', fille: '👧', homme: '👨', femme: '👩', maman: '👩', père: '👨', ami: '🤝',
+  rouge: '🔴', bleu: '🔵', vert: '🟢', bonjour: '👋', salut: '👋', merci: '🙏',
+  // Spanish & German & Japanese Common
+  gato: '🐱', perro: '🐕', casa: '🏠', libro: '📖', agua: '💧', mesa: '🪑',
+  katze: '🐱', hund: '🐕', buch: '📖', wasser: '💧', haus: '🏠', tisch: '🪑', apfel: '🍎',
+  ねこ: '🐱', いぬ: '🐕', みず: '💧', ほん: '📖', りんご: '🍎', さくら: '🌸'
 };
 
 const getEmojiForText = (text = '') => {
   const lower = (text || '').toLowerCase();
   for (const [word, emoji] of Object.entries(WORD_EMOJI_MAP)) {
-    const regex = new RegExp(`\\b${word}s?\\b`, 'i');
-    if (regex.test(lower)) return emoji;
+    if (lower.includes(word)) return emoji;
   }
   return '🗣️';
 };
 
 // ============================================================================
-// 🧹 0.5 منقي النصوص التلقائي
+// 🌍 0.2 كاشف اللغة الصوتي الذكي (يكتشف لغة الكورس أو النص تلقائياً)
+// ============================================================================
+const resolveLanguageConfig = (contextStr = '', sampleText = '') => {
+  const combined = `${contextStr} ${sampleText}`.toLowerCase();
+
+  if (/[\u3040-\u30ff]/.test(sampleText) || /يابان|japanese|日本語|jlpt|هيراغانا|كاتاكانا|كانجي/i.test(combined)) {
+    return { code: 'ja-JP', nameAr: 'اليابانية', nameEn: 'Japanese', flag: '🇯🇵' };
+  }
+  if (/[\u4e00-\u9faf]/.test(sampleText) && /صين|mandarin|chinese|中文|hsk|pinyin/i.test(combined)) {
+    return { code: 'zh-CN', nameAr: 'الصينية', nameEn: 'Chinese', flag: '🇨🇳' };
+  }
+  if (/فرنس|french|français|delf|dalf|أصوات أنفية|liaison|c'est|est-ce que|bonjour/i.test(combined)) {
+    return { code: 'fr-FR', nameAr: 'الفرنسية', nameEn: 'French', flag: '🇫🇷' };
+  }
+  if (/ألمان|المان|german|deutsch|goethe|testdaf|umlaut|das ist|guten tag/i.test(combined)) {
+    return { code: 'de-DE', nameAr: 'الألمانية', nameEn: 'German', flag: '🇩🇪' };
+  }
+  if (/إسبان|اسبان|spanish|español|dele|siele|buenos días|¿/i.test(combined)) {
+    return { code: 'es-ES', nameAr: 'الإسبانية', nameEn: 'Spanish', flag: '🇪🇸' };
+  }
+  if (/صين|mandarin|chinese|中文|hsk|pinyin/i.test(combined)) {
+    return { code: 'zh-CN', nameAr: 'الصينية', nameEn: 'Chinese', flag: '🇨🇳' };
+  }
+  return { code: 'en-US', nameAr: 'الإنجليزية', nameEn: 'English', flag: '🇬🇧' };
+};
+
+// ============================================================================
+// 🧹 0.5 منقي النصوص التلقائي الشامل (يصلح حتى ملفات JSON المولدة سابقاً فوراً!)
 // ============================================================================
 const sanitizeLessonMarkdown = (raw = '', stripRawPromptSection = false) => {
   if (!raw) return '';
   let cleaned = raw
+    .replace(/[\u0900-\u097F]+/g, '') // إزالة أي رموز هندية عابرة مثل (وड़ने)
     .replace(/פּ/g, 'پ')
+    .replace(/c'هست/gi, "c'est")
+    .replace(/C'هست/g, "C'est")
+    .replace(/c'ست/gi, "c'est")
+    .replace(/C'ست/g, "C'est")
+    .replace(/مaman/gi, "maman")
+    .replace(/Il\s+هو\s+bon/gi, "Il est bon")
+    .replace(/\bun clé\b/gi, "une clé")
+    .replace(/\bUn clé\b/g, "Une clé")
     .replace(/---+\+/g, '---')
+    .replace(/---;/g, '---')
     .replace(/🔊\s*IPA:\s*\/([\u0600-\u06FF\s]+)\//g, '🔊 النطق: /$1/');
 
   if (stripRawPromptSection) {
@@ -51,8 +100,21 @@ const sanitizeLessonMarkdown = (raw = '', stripRawPromptSection = false) => {
   return cleaned;
 };
 
+// 🎨 كاشف الجنس النحوي التلقائي لتلوين الكلمات المذكرة (🔵) والمؤنثة (🔴) في الفرنسية والإسبانية والألمانية
+const detectGrammaticalGenderBadge = (text = '') => {
+  const trimmed = (text || '').trim().toLowerCase();
+  if (/^(un|le|du|mon|ton|son|ce|cet|el|un|der|ein)\s+/i.test(trimmed) || trimmed.includes('🔵')) {
+    return { type: 'masc', label: '🔵 مذكر', classes: 'bg-sky-500/15 text-sky-300 border-sky-500/30' };
+  }
+  if (/^(une|la|de la|ma|ta|sa|cette|una|die|eine)\s+/i.test(trimmed) || trimmed.includes('🔴')) {
+    return { type: 'fem', label: '🔴 مؤنث', classes: 'bg-rose-500/15 text-rose-300 border-rose-500/30' };
+  }
+  return null;
+};
+
+
 // ============================================================================
-// 🎧 1. محلل استوديو الاستماع والترديد
+// 🎧 1. محلل استوديو الاستماع والترديد (يدعم جميع اللغات)
 // ============================================================================
 const parseAudioShadowingSnippet = (rawSnippet = '') => {
   if (!rawSnippet || (!rawSnippet.includes('IPA:') && !rawSnippet.includes('🎧'))) return [];
@@ -99,7 +161,7 @@ const parseAudioShadowingSnippet = (rawSnippet = '') => {
 };
 
 // ============================================================================
-// 🧩 2. مستخرج مكعبات الليغو، سُلّم البناء، جدول الأخطاء، ومفردات الدرس المستهدفة
+// 🧩 2. مستخرج مكعبات الليغو، سُلّم البناء، جدول الأخطاء، ومفردات الدرس (متعدد اللغات)
 // ============================================================================
 const extractLanguageVisualWidgets = (rawMarkdown = '') => {
   const markdown = sanitizeLessonMarkdown(rawMarkdown, false);
@@ -125,11 +187,12 @@ const extractLanguageVisualWidgets = (rawMarkdown = '') => {
       }
     }
 
-    const backtickMatches = trimmed.match(/`([A-Za-z][A-Za-z\s'.?!-]{1,35})`/g);
+    // استخراج القوالب الكلامية لجميع اللغات (بما فيها الفرنسية، الألمانية، الإسبانية، اليابانية، الصينية)
+    const backtickMatches = trimmed.match(/`([^\u0600-\u06FF`]{2,45})`/g);
     if (backtickMatches) {
       backtickMatches.forEach(m => {
         const cleanM = m.replace(/`/g, '').replace(/\.\.\./g, '').trim();
-        if (cleanM.length >= 2 && !extractedChunks.includes(cleanM)) {
+        if (cleanM.length >= 2 && !cleanM.includes('[') && !extractedChunks.includes(cleanM)) {
           extractedChunks.push(cleanM);
         }
       });
@@ -152,7 +215,7 @@ const extractLanguageVisualWidgets = (rawMarkdown = '') => {
           currentMistake = { wrong: wrongText, right: '', reason: '' };
         }
       } else if (trimmed.includes('✅') && currentMistake) {
-        currentMistake.right = trimmed.replace(/^[*-\d.]+\s*/, '').replace(/\*\*الصواب الأصيل:\*\*/g, '').replace('✅', '').trim();
+        currentMistake.right = trimmed.replace(/^[*-\d.]+\s*/, '').replace(/\*\*الصواب الأصيل.*?:\*\*/g, '').replace('✅', '').trim();
       } else if ((trimmed.includes('💡') || trimmed.startsWith('*السبب') || trimmed.startsWith('**السبب')) && currentMistake) {
         currentMistake.reason = trimmed.replace(/^[*-\d.]+\s*/, '').replace(/\*\*السبب اللغوي:\*\*/g, '').replace('💡', '').trim();
       }
@@ -168,12 +231,13 @@ const extractLanguageVisualWidgets = (rawMarkdown = '') => {
   if (ladderSection) {
     const ladderLines = ladderSection.split('\n').map(l => l.trim()).filter(Boolean);
     ladderLines.forEach(l => {
-      if (/^(?:\d+\.|[-*])\s*\**الدرجة|^-\s*[A-Za-z]/.test(l)) {
+      if (/^(?:\d+\.|[-*])\s*\**الدرجة|^-\s*[^\u0600-\u06FF]/.test(l)) {
         const cleanStep = l.replace(/^(?:\d+\.|[-*])\s*/, '').replace(/\*\*/g, '').replace(/`/g, '').trim();
-        const engMatch = cleanStep.match(/([A-Za-z][A-Za-z\s,.?!']+)/);
+        // استخراج النص الأجنبي من الدرجة (فرنسي، إنجليزي، ألماني، إسباني، ياباني، صيني)
+        const foreignMatch = cleanStep.match(/([A-Za-z\u00C0-\u024F\u3040-\u30ff\u4e00-\u9faf][A-Za-z\u00C0-\u024F\u3040-\u30ff\u4e00-\u9faf\s,.?!'’¿¡-]+)/);
         ladderSteps.push({
           rawText: cleanStep,
-          englishText: engMatch ? engMatch[1].trim() : ''
+          englishText: foreignMatch ? foreignMatch[1].trim() : ''
         });
       }
     });
@@ -301,7 +365,13 @@ const Classroom = () => {
     return [...quizArray].sort(() => Math.random() - 0.5);
   };
 
-  const hydrateSingleCourseObject = (courseJson, parentCertTitle = '') => {
+  // معلومات اللغة الحالية للكورس والدرس
+  const activeLangConfig = useMemo(() => {
+    const fullContext = `${course?.targetLanguage || ''} ${course?.speechLang || ''} ${course?.parentCertTitle || ''} ${course?.title || ''} ${course?.description || ''} ${activeLesson?.section || ''} ${activeLesson?.title || ''}`;
+    return resolveLanguageConfig(fullContext, activeLesson?.codeSnippet || '');
+  }, [course, activeLesson]);
+
+  const hydrateSingleCourseObject = (courseJson, parentCertTitle = '', parentTargetLang = '', parentSpeechLang = '') => {
     if (!courseJson) return false;
     const cleanedTitle = cleanCourseTitleText(courseJson.courseTitle || courseJson.title || 'كراش كورس تفاعلي');
     const courseObj = {
@@ -309,6 +379,8 @@ const Classroom = () => {
       courseOrder: courseJson.courseOrder || 1,
       title: cleanedTitle,
       parentCertTitle: parentCertTitle || courseJson.parentCertTitle || '',
+      targetLanguage: courseJson.targetLanguage || parentTargetLang || '',
+      speechLang: courseJson.speechLang || parentSpeechLang || '',
       description: courseJson.courseDescription || courseJson.description || '',
       difficulty: courseJson.difficultyLevel || '',
       estimatedHours: courseJson.estimatedHours || '18 ساعة',
@@ -358,16 +430,26 @@ const Classroom = () => {
       setCertificateCoursesList(rawJson.courses);
       const validIdx = Math.min(targetCourseIdx, rawJson.courses.length - 1);
       setActiveCertCourseIdx(validIdx);
-      return hydrateSingleCourseObject(rawJson.courses[validIdx], rawJson.certificateTitle || rawJson.courseTitle);
+      return hydrateSingleCourseObject(
+        rawJson.courses[validIdx],
+        rawJson.certificateTitle || rawJson.courseTitle,
+        rawJson.targetLanguage || '',
+        rawJson.speechLang || ''
+      );
     }
     setCertificateCoursesList([]);
-    return hydrateSingleCourseObject(rawJson);
+    return hydrateSingleCourseObject(rawJson, rawJson.parentCertTitle || '', rawJson.targetLanguage || '', rawJson.speechLang || '');
   };
 
   const handleSwitchCertificateCourse = (cIdx) => {
     if (!certificateCoursesList[cIdx]) return;
     setActiveCertCourseIdx(cIdx);
-    hydrateSingleCourseObject(certificateCoursesList[cIdx], course?.parentCertTitle);
+    hydrateSingleCourseObject(
+      certificateCoursesList[cIdx],
+      course?.parentCertTitle,
+      course?.targetLanguage,
+      course?.speechLang
+    );
     resetQuestState();
   };
 
@@ -390,28 +472,48 @@ const Classroom = () => {
     reader.readAsText(file);
   };
 
-  const getBestNaturalEnglishVoice = () => {
+  // ============================================================================
+  // 🔊 محرك اختيار الصوت الطبيعي والنطق لجميع اللغات (fr-FR, ja-JP, de-DE, es-ES, zh-CN, en-US)
+  // ============================================================================
+  const getBestNaturalVoiceForLang = (langCode = 'en-US') => {
     if (!('speechSynthesis' in window)) return null;
     const voices = window.speechSynthesis.getVoices() || [];
-    const englishVoices = voices.filter(v => /^en(-|_)/i.test(v.lang));
-    if (englishVoices.length === 0) return null;
+    const langPrefix = langCode.split('-')[0].toLowerCase();
+    const matchingVoices = voices.filter(v => (v.lang || '').toLowerCase().startsWith(langPrefix));
+    if (matchingVoices.length === 0) return null;
 
-    const preferredNames = ['Natural', 'Online', 'Google US English', 'Google UK English Female', 'Samantha', 'Aria', 'Guy', 'Daniel'];
-    for (const pref of preferredNames) {
-      const found = englishVoices.find(v => v.name.includes(pref));
+    const preferredKeywords = [
+      'Natural', 'Online', 'Google', 'Microsoft', 'Denise', 'Henri', 'Paul', 'Julie',
+      'Amelie', 'Thomas', 'Katja', 'Conrad', 'Alvaro', 'Elvira', 'Nanami', 'Keita',
+      'Xiaoxiao', 'Yunxi', 'Samantha', 'Aria', 'Guy', 'Daniel'
+    ];
+    for (const pref of preferredKeywords) {
+      const found = matchingVoices.find(v => v.name.includes(pref));
       if (found) return found;
     }
-    return englishVoices[0];
+    return matchingVoices[0];
   };
 
-  const handlePlayAudioText = (rawText, rate = 1.0, keyId = 'studio', onEndCallback = null) => {
-    if (!('speechSynthesis' in window)) {
-      if (onEndCallback) onEndCallback();
-      return;
-    }
-    window.speechSynthesis.cancel();
 
-    const cleanForeign = (rawText || '')
+const neuralAudioCacheRef = useRef({});
+  const activeHtmlAudioRef = useRef(null);
+
+  const handleStopAudio = () => {
+    if (activeHtmlAudioRef.current) {
+      activeHtmlAudioRef.current.pause();
+      activeHtmlAudioRef.current.currentTime = 0;
+      activeHtmlAudioRef.current = null;
+    }
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    setSpeakingKey('');
+  };
+
+  const handlePlayAudioText = async (rawText, rate = 1.0, keyId = 'studio', onEndCallback = null) => {
+    handleStopAudio();
+
+    const cleanForeign = sanitizeLessonMarkdown(rawText || '')
       .split('\n')
       .map(l => l.replace(/🔊.*$/g, '').replace(/\|.*$/g, '').replace(/^\d+[.) -]+/, '').replace(/\([^)]*[\u0600-\u06FF]+[^)]*\)/g, '').trim())
       .filter(l => l && !l.startsWith('🎧') && !/^[\u0600-\u06FF\s\d.,:!؟-]+$/.test(l))
@@ -423,29 +525,75 @@ const Classroom = () => {
       return;
     }
 
-    const utterance = new SpeechSynthesisUtterance(textToSpeak);
-    const bestVoice = getBestNaturalEnglishVoice();
-    if (bestVoice) utterance.voice = bestVoice;
-    utterance.rate = rate;
-    utterance.lang = 'en-US';
-    utterance.onstart = () => setSpeakingKey(`${keyId}_${rate}`);
-    utterance.onend = () => {
-      setSpeakingKey('');
-      if (onEndCallback) onEndCallback();
-    };
-    utterance.onerror = () => {
-      setSpeakingKey('');
-      if (onEndCallback) onEndCallback();
-    };
-    window.speechSynthesis.speak(utterance);
-  };
+    const detectedLang = resolveLanguageConfig(
+      `${course?.targetLanguage || ''} ${course?.speechLang || ''} ${course?.parentCertTitle || ''} ${course?.title || ''} ${course?.description || ''} ${activeLesson?.section || ''}`,
+      textToSpeak
+    );
 
-  const handleStopAudio = () => {
+    const activeStateKey = `${keyId}_${rate}`;
+    const cacheKey = `${detectedLang.code}_${rate}_${textToSpeak}`;
+    setSpeakingKey(activeStateKey);
+
+    // 1. إذا كان المقطع الصوتي العصبي محفوظاً في الكاش، نشغله في 0 جزء من الثانية!
+    if (neuralAudioCacheRef.current[cacheKey]) {
+      const cachedAudio = new Audio(neuralAudioCacheRef.current[cacheKey]);
+      activeHtmlAudioRef.current = cachedAudio;
+      cachedAudio.onended = () => {
+        setSpeakingKey('');
+        if (onEndCallback) onEndCallback();
+      };
+      cachedAudio.onerror = () => setSpeakingKey('');
+      cachedAudio.play().catch(() => setSpeakingKey(''));
+      return;
+    }
+
+    // 2. طلب الصوت البشري العصبي (Edge-TTS Neural Voice) من السيرفر
+    try {
+      const res = await axios.post('http://localhost:5000/api/academy2/lang-cert/neural-tts', {
+        text: textToSpeak,
+        langCode: detectedLang.code,
+        rate
+      }, { timeout: 6500 });
+
+      if (res.data?.success && res.data.audioUrl) {
+        neuralAudioCacheRef.current[cacheKey] = res.data.audioUrl;
+        const audio = new Audio(res.data.audioUrl);
+        activeHtmlAudioRef.current = audio;
+        audio.onended = () => {
+          setSpeakingKey('');
+          if (onEndCallback) onEndCallback();
+        };
+        audio.onerror = () => setSpeakingKey('');
+        await audio.play();
+        return;
+      }
+    } catch (e) {
+      // الانتقال الصامت والآني لصوت المتصفح في حال عدم توفر السيرفر
+    }
+
+    // 3. خطة الطوارئ الفورية (Web Speech API)
     if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(textToSpeak);
+      const bestVoice = getBestNaturalVoiceForLang(detectedLang.code);
+      if (bestVoice) utterance.voice = bestVoice;
+      utterance.rate = rate;
+      utterance.lang = detectedLang.code;
+      utterance.onend = () => {
+        setSpeakingKey('');
+        if (onEndCallback) onEndCallback();
+      };
+      utterance.onerror = () => {
+        setSpeakingKey('');
+        if (onEndCallback) onEndCallback();
+      };
+      window.speechSynthesis.speak(utterance);
+    } else {
       setSpeakingKey('');
+      if (onEndCallback) onEndCallback();
     }
   };
+
+
 
   const handleTestPronunciationMic = (targetSentence, rowIndex) => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -454,7 +602,7 @@ const Classroom = () => {
     }
 
     const recognition = new SpeechRecognition();
-    recognition.lang = 'en-US';
+    recognition.lang = activeLangConfig.code;
     recognition.interimResults = false;
     recognition.onstart = () => {
       setListeningRowIdx(rowIndex);
@@ -462,9 +610,20 @@ const Classroom = () => {
     };
     recognition.onresult = (event) => {
       const spoken = event.results[0][0].transcript || '';
-      const cleanTarget = targetSentence.replace(/[^a-zA-Z0-9\s]/g, '').toLowerCase().trim();
-      const cleanSpoken = spoken.replace(/[^a-zA-Z0-9\s]/g, '').toLowerCase().trim();
-      const isGoodMatch = cleanSpoken === cleanTarget || cleanTarget.includes(cleanSpoken) || cleanSpoken.includes(cleanTarget);
+      // مقارنة ذكية تدعم الحروف اللاتينية المزخرفة (é, è, ç, ü, ñ) واللغات الشرقية (اليابانية والصينية)
+      const normalizeUnicode = (str) => (str || '')
+        .replace(/[^\p{L}\p{N}\s]/gu, '')
+        .replace(/\s+/g, ' ')
+        .toLowerCase()
+        .trim();
+
+      const cleanTarget = normalizeUnicode(targetSentence);
+      const cleanSpoken = normalizeUnicode(spoken);
+      const isGoodMatch = cleanSpoken.length > 0 && (
+        cleanSpoken === cleanTarget ||
+        cleanTarget.includes(cleanSpoken) ||
+        cleanSpoken.includes(cleanTarget)
+      );
 
       setSpeechCheckResult({
         rowIndex,
@@ -495,7 +654,9 @@ const Classroom = () => {
           const rawCourse = courseRes.data.course;
           setCourse({
             ...rawCourse,
-            title: cleanCourseTitleText(rawCourse.title)
+            title: cleanCourseTitleText(rawCourse.title),
+            parentCertTitle: rawCourse.certificateMeta?.parentCertificateTitle || rawCourse.parentCertTitle || '',
+            targetLanguage: rawCourse.certificateMeta?.targetLanguage || rawCourse.targetLanguage || ''
           });
 
           let extractedMap = rawCourse.certificateMeta?.unitSummariesMap || {};
@@ -562,16 +723,19 @@ const Classroom = () => {
   }, [audioStudioItems, visualWidgets]);
 
   // ============================================================================
-  // 🧠🎙️ المحرك الثلاثي الذكي (يفصل الأنماط الـ 3 تماماً + يفصل تصحيح إجابة الطالب عن السؤال الجديد!)
+  // 🧠🎙️ المحرك الثلاثي الذكي (متعدد اللغات: يدعم الفرنسية، الإنجليزية، وجميع اللغات!)
   // ============================================================================
   const generateSmartContextualFallback = (spokenText, turnIdx, mode, currentTargetIdx = 0) => {
-    const fullCtx = `${course?.title || ''} ${course?.difficulty || ''} ${activeLesson?.section || ''} ${activeLesson?.title || ''}`;
+    const fullCtx = `${course?.parentCertTitle || ''} ${course?.title || ''} ${course?.difficulty || ''} ${activeLesson?.section || ''} ${activeLesson?.title || ''}`;
     const cOrder = Number(course?.courseOrder) || (activeCertCourseIdx + 1) || 1;
     const isZeroLevel = cOrder <= 3 || /Pre-A1|A0|الحروف|أصوات|Phonics|CVC|الثلاثية|القصيرة جداً|كورس 1\b|كورس 2\b|كورس 3\b/i.test(fullCtx);
+    const isFrench = activeLangConfig.code === 'fr-FR';
 
-    const targets = lessonTargetVocabulary.length > 0
-      ? lessonTargetVocabulary
+    const defaultFallbackVocab = isFrench
+      ? (isZeroLevel ? ['un chat', 'un livre', 'une table', 'bonjour'] : ['prendre une décision', 'avoir besoin de', 'à mon avis'])
       : (isZeroLevel ? ['a cat', 'a mat', 'a red cup', 'in the sun'] : ['make a decision', 'take a break', 'heavy rain', 'have a great time']);
+
+    const targets = lessonTargetVocabulary.length > 0 ? lessonTargetVocabulary : defaultFallbackVocab;
 
     const tCurrent = targets[currentTargetIdx % targets.length] || targets[0];
     const tNext = targets[(currentTargetIdx + 1) % targets.length] || targets[0];
@@ -583,6 +747,12 @@ const Classroom = () => {
       const words = cleaned.split(/\s+/);
       if (words.length <= 2) {
         const cap = cleaned.charAt(0).toUpperCase() + cleaned.slice(1).replace(/[.?!]+$/, '');
+        if (isFrench) {
+          return {
+            upgrade: isZeroLevel ? `Oui, c'est ${cleaned.toLowerCase()}.` : `Je dirais "${cap}" dans cette situation.`,
+            tip: `💡 نطقك لكلمة (${cleaned}) بالفرنسية واضح! لتحويلها إلى جملة كاملة، ابدأ بـ (Oui, c'est...).`
+          };
+        }
         return {
           upgrade: isZeroLevel ? `Yes, it is ${cleaned.toLowerCase()}.` : `I would say "${cap}" in this situation.`,
           tip: `💡 نطقك لكلمة (${cleaned}) واضح! لتحويلها إلى جملة كاملة كالمتحدث الأصلي، ابدأ بـ (Yes, it is...).`
@@ -591,11 +761,58 @@ const Classroom = () => {
       const formatted = cleaned.charAt(0).toUpperCase() + cleaned.slice(1) + (/[.?!]$/.test(cleaned) ? '' : '.');
       return {
         upgrade: formatted,
-        tip: `✅ تركيب جملتك ممتاز وطبيعي! استمر بهذا التدفق الصوتي الرائع.`
+        tip: `✅ تركيب جملتك باللغة ${activeLangConfig.nameAr} ممتاز وطبيعي! استمر بهذا التدفق الصوتي الرائع.`
       };
     };
 
     const studentEval = buildStudentSpeechUpgrade(spokenText);
+
+    if (isFrench) {
+      if (spokenText === '__START_SESSION__') {
+        return {
+          studentSpeechUpgrade: '',
+          studentSpeechFeedbackArabic: '',
+          pronunciationScore: null,
+          sceneMeta: {
+            setting: '☕ في مقهى بباريس (Dans un café à Paris)',
+            aiRole: 'الصديق لوكاس (Ton ami Lucas)',
+            studentGoal: `تحدث بالفرنسية واستخدم مفردات الدرس مثل (${targets.slice(0, 3).join(' / ')})`
+          },
+          coachReactionEnglish: `Bonjour mon ami ! Bienvenue dans notre cours de français.`,
+          coachReactionArabic: `مرحباً يا صديقي! أهلاً بك في حصتنا للغة الفرنسية.`,
+          nextQuestionEnglish: isZeroLevel
+            ? `Regarde bien : est-ce que c'est "${tCurrent}" ou "${tNext}" ?`
+            : `Dis-moi, comment peux-tu utiliser "${tCurrent}" dans une phrase en français ?`,
+          nextQuestionArabic: isZeroLevel
+            ? `انظر جيداً: هل هذا (${tCurrent}) أم (${tNext})؟`
+            : `أخبرني، كيف يمكنك استخدام (${tCurrent}) في جملة بالفرنسية؟`,
+          connectedSpeechHint: `C'est un -> /sɛ.tœ̃/ (الربط الصوتي الفرنسي La Liaison)`,
+          modelAnswerForNextQuestion: isZeroLevel ? `Oui, c'est ${tCurrent}.` : `Je pense que ${tCurrent} est très important.`,
+          suggestedReplies: isZeroLevel
+            ? [`Oui, c'est ${tCurrent}.`, `Voici ${tNext}.`, `C'est ${tCurrent} !`]
+            : [`Je pense que ${tCurrent}.`, `J'utilise souvent ${tNext}.`, `Oui, bien sûr !`]
+        };
+      }
+
+      return {
+        studentSpeechUpgrade: studentEval.upgrade,
+        studentSpeechFeedbackArabic: studentEval.tip,
+        pronunciationScore: 95,
+        coachReactionEnglish: `Très bien ! Ta prononciation française s'améliore beaucoup.`,
+        coachReactionArabic: `ممتاز جداً! نطقك للفرنسية يتحسن كثيراً.`,
+        nextQuestionEnglish: isZeroLevel
+          ? `Maintenant, peux-tu dire une phrase simple avec "${tNext}" ?`
+          : `Et si on utilise "${tNext}", que dirais-tu ?`,
+        nextQuestionArabic: isZeroLevel
+          ? `الآن، هل يمكنك قول جملة بسيطة تحتوي على (${tNext})؟`
+          : `وماذا لو استخدمنا (${tNext})، ماذا ستقول؟`,
+        connectedSpeechHint: `Est-ce que -> /ɛs.kə/`,
+        modelAnswerForNextQuestion: isZeroLevel ? `C'est ${tNext}.` : `J'aime beaucoup ${tNext}.`,
+        suggestedReplies: isZeroLevel
+          ? [`C'est ${tNext}.`, `Voilà ${tNext} !`, `Oui, c'est ${tThird}.`]
+          : [`J'aime bien ${tNext}.`, `Voici un exemple avec ${tNext}.`, `D'accord !`]
+      };
+    }
 
     if (mode === 'roleplay') {
       const sceneInfo = isZeroLevel
@@ -779,7 +996,7 @@ const Classroom = () => {
   };
 
   // ============================================================================
-  // 🚀 دالة إرسال كلام الطالب للمدرب الذكي (مصححة ومحصنة 100% ضد أي تعليق!)
+  // 🚀 دالة إرسال كلام الطالب للمدرب الذكي (تمرر اللغة المستهدفة للسيرفر وتدعم كل اللغات!)
   // ============================================================================
   const sendToInAppVoiceCoach = async (spokenText, overrideMode = null) => {
     const activeMode = overrideMode || speakClassMode;
@@ -801,10 +1018,10 @@ const Classroom = () => {
         });
         setVoiceChatMessages(updatedHistory);
 
-        // فحص الكلمات التي نجح الطالب في توظيفها وإضاءتها باللون الأخضر
-        const lowerSpoken = spokenText.toLowerCase();
+        // فحص الكلمات التي نجح الطالب في توظيفها (يدعم الحروف الفرنسية واليابانية والألمانية والإسبانية!)
+        const lowerSpoken = spokenText.replace(/[^\p{L}\p{N}\s]/gu, '').toLowerCase();
         lessonTargetVocabulary.forEach((vocab, vIdx) => {
-          const cleanV = vocab.replace(/[^a-zA-Z0-9\s]/g, '').toLowerCase().trim();
+          const cleanV = vocab.replace(/[^\p{L}\p{N}\s]/gu, '').toLowerCase().trim();
           if (cleanV && lowerSpoken.includes(cleanV)) {
             setUsedLessonWords(prev => {
               if (!prev.includes(vocab)) {
@@ -827,7 +1044,8 @@ const Classroom = () => {
       let coachData = null;
       try {
         const res = await axios.post('http://localhost:5000/api/academy2/lang-cert/live-voice-coach', {
-          courseTitle: course?.title || '',
+          courseTitle: `${course?.parentCertTitle || ''} ${course?.title || ''}`.trim(),
+          targetLanguage: course?.targetLanguage || activeLangConfig.nameAr,
           courseOrder: course?.courseOrder || (activeCertCourseIdx + 1) || 1,
           sectionOrder: activeLesson?.sectionOrder || 1,
           difficulty: course?.difficulty || '',
@@ -846,7 +1064,6 @@ const Classroom = () => {
           coachData = res.data.data;
         }
       } catch (err) {
-        // في حال تأخر السيرفر أو انقطاعه، يعمل المحرك الذكي المحلي فوراً دون أي توقف!
         coachData = generateSmartContextualFallback(spokenText, localTurnCounter, activeMode, nextMissionIdx);
       }
 
@@ -929,7 +1146,7 @@ const Classroom = () => {
   };
 
   // ============================================================================
-  // 🎙️🔥 نظام "اضغط مطولاً للتحدث" (Push-to-Talk)
+  // 🎙️🔥 نظام "اضغط مطولاً للتحدث" (Push-to-Talk) - يتعرف على لغة الكورس تلقائياً!
   // ============================================================================
   const startHoldToTalk = (e) => {
     if (e && e.cancelable) e.preventDefault();
@@ -946,7 +1163,7 @@ const Classroom = () => {
     holdStartTimeRef.current = Date.now();
 
     const recognition = new SpeechRecognition();
-    recognition.lang = 'en-US';
+    recognition.lang = activeLangConfig.code;
     recognition.continuous = true;
     recognition.interimResults = true;
 
@@ -1223,10 +1440,12 @@ const Classroom = () => {
     setCodeFeedback(null);
 
     try {
-      const res = await axios.post('http://localhost:5000/api/academy2/verify-student-code', {
+    const res = await axios.post('http://localhost:5000/api/academy2/verify-student-code', {
         taskQuestion: activeLesson.codingPractice.taskQuestion,
         studentCode: studentCode,
-        solutionCode: activeLesson.codingPractice.solutionCode
+        solutionCode: activeLesson.codingPractice.solutionCode,
+        targetLanguage: activeLangConfig.nameAr,
+        isLanguageTask: isLanguageLesson
       });
 
       if (res.data.success) {
@@ -1286,7 +1505,7 @@ const Classroom = () => {
     activeLesson?.lessonCategory === 'language_mastery' ||
     activeLesson?.codeSnippet?.includes('IPA:') ||
     activeLesson?.codeSnippet?.includes('🎧') ||
-    /Pre-A1|A0|A1|A2|B1|B2|C1|C2|Phonics|Lego|Shadowing|Collocations|الحروف|اللغة|متلازمات/i.test(`${course?.title || ''} ${activeLesson?.title || ''}`)
+    /Pre-A1|A0|A1|A2|B1|B2|C1|C2|Phonics|Lego|Shadowing|Collocations|الحروف|اللغة|متلازمات|فرنس|يابان|ألمان|إسبان|صين/i.test(`${course?.title || ''} ${activeLesson?.title || ''}`)
   );
 
   const activeUnitSummary = useMemo(() => {
@@ -1390,11 +1609,18 @@ const Classroom = () => {
         )}
         
         <div className="p-5 border-b border-slate-800/60 bg-gradient-to-b from-[#0f172a]/50 to-transparent">
-          {course?.certificateBadge && (
-            <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-500/10 border border-amber-500/30 text-amber-300 px-2.5 py-0.5 rounded-full mb-2">
-              <Award size={11} /> {course.certificateBadge}
-            </span>
-          )}
+          <div className="flex flex-wrap items-center gap-1.5 mb-2">
+            {course?.certificateBadge && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-500/10 border border-amber-500/30 text-amber-300 px-2.5 py-0.5 rounded-full">
+                <Award size={11} /> {course.certificateBadge}
+              </span>
+            )}
+            {isLanguageLesson && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-purple-500/15 border border-purple-500/30 text-purple-300 px-2 py-0.5 rounded-full">
+                {activeLangConfig.flag} {activeLangConfig.nameAr}
+              </span>
+            )}
+          </div>
           <h2 className="heading-font font-bold text-white text-[15.5px] leading-[1.6]">{course?.title}</h2>
           <div className="w-full bg-slate-800/90 rounded-full h-2 mt-4 overflow-hidden relative">
             <div className="bg-emerald-500 h-2 rounded-full transition-all duration-1000 ease-out shadow-[0_0_10px_rgba(16,185,129,0.5)]" style={{ width: `${progressPercentage}%` }}></div>
@@ -1707,12 +1933,20 @@ const Classroom = () => {
                 /* 📘 الدرس العادي: الشرح + استوديو Speak Class الثلاثي الاحترافي */
                 /* ======================================================= */
                 <div>
-                  {activeLesson.section && (
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold mb-4">
-                      <BookOpen size={13} />
-                      <span>{activeLesson.section}</span>
-                    </div>
-                  )}
+                  <div className="flex flex-wrap items-center gap-2 mb-4">
+                    {activeLesson.section && (
+                      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
+                        <BookOpen size={13} />
+                        <span>{activeLesson.section}</span>
+                      </div>
+                    )}
+                    {isLanguageLesson && (
+                      <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-purple-500/15 border border-purple-500/30 text-purple-300 text-xs font-bold">
+                        <span>{activeLangConfig.flag}</span>
+                        <span>النطق الصوتي المفعّل: {activeLangConfig.nameAr} ({activeLangConfig.code})</span>
+                      </div>
+                    )}
+                  </div>
 
                   <h1 className="heading-font text-2xl sm:text-3xl md:text-[34px] font-extrabold text-white mb-4 leading-[1.45] tracking-normal">
                     {activeLesson.title}
@@ -1754,7 +1988,7 @@ const Classroom = () => {
                     <div className="mb-10 bg-gradient-to-br from-indigo-950/30 via-[#0b1120] to-[#0b1120] border-2 border-indigo-500/35 rounded-2xl p-6 shadow-xl">
                       <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
                         <h3 className="heading-font text-lg font-bold text-indigo-300 flex items-center gap-2">
-                          <Layers size={20} className="text-emerald-400" /> 🪜 سُلّم البناء التراكمي الناطق (اضغط على كل درجة لسماع كيف تكبر الجملة):
+                          <Layers size={20} className="text-emerald-400" /> 🪜 سُلّم البناء التراكمي الناطق باللغة {activeLangConfig.nameAr} (اضغط على كل درجة لسماعها):
                         </h3>
                         <span className="text-[11px] bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 px-2.5 py-0.5 rounded-full font-bold">
                           من كلمة واحدة ➔ جملة كاملة 🔊
@@ -1875,7 +2109,7 @@ const Classroom = () => {
                           th({children}) {
                             return <th className="p-3.5 md:p-4 font-bold text-right">{children}</th>
                           },
-                          td({children}) {
+td({children}) {
                             const extractRawString = (node) => {
                               if (typeof node === 'string') return node;
                               if (Array.isArray(node)) return node.map(extractRawString).join('');
@@ -1885,7 +2119,14 @@ const Classroom = () => {
                             const cellText = extractRawString(children).trim();
                             const isWrongCell = cellText.includes('❌');
                             const isRightCell = cellText.includes('✅');
-                            const isPureEnglishWord = /^[A-Za-z\s/-]{1,22}$/.test(cellText) && !cellText.includes('/');
+                            const isPureForeignWord =
+                              cellText.length >= 1 &&
+                              cellText.length <= 35 &&
+                              !cellText.includes('/') &&
+                              !/[\u0600-\u06FF]/.test(cellText) &&
+                              /[\p{L}]/u.test(cellText);
+
+                            const genderBadge = isPureForeignWord ? detectGrammaticalGenderBadge(cellText) : null;
 
                             return (
                               <td className={`p-3.5 md:p-4 leading-relaxed ${
@@ -1893,12 +2134,17 @@ const Classroom = () => {
                                 : isRightCell ? 'bg-emerald-950/15 text-emerald-200 font-bold'
                                 : 'text-slate-200'
                               }`}>
-                                <div className="flex items-center justify-between gap-2">
-                                  <span>
-                                    {isPureEnglishWord && <span className="ml-1.5">{getEmojiForText(cellText)}</span>}
-                                    {children}
+                                <div className="flex items-center justify-between gap-2 flex-wrap">
+                                  <span className="inline-flex items-center gap-1.5 flex-wrap">
+                                    {isPureForeignWord && <span className="ml-1">{getEmojiForText(cellText)}</span>}
+                                    <span>{children}</span>
+                                    {genderBadge && (
+                                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${genderBadge.classes}`}>
+                                        {genderBadge.label}
+                                      </span>
+                                    )}
                                   </span>
-                                  {isPureEnglishWord && (
+                                  {isPureForeignWord && (
                                     <button
                                       type="button"
                                       onClick={() => handlePlayAudioText(cellText.split('/')[0].trim(), 0.9, `tbl_${cellText}`)}
@@ -1910,12 +2156,18 @@ const Classroom = () => {
                                   )}
                                 </div>
                               </td>
-                            )
+                            );
                           },
+
                           code({node, inline, className, children, ...props}) {
                             const match = /language-(\w+)/.exec(className || '');
                             const codeStr = String(children).replace(/\n$/, '');
-                            const isShortEnglishPhrase = (inline || !match) && codeStr.length < 60 && /[A-Za-z]/.test(codeStr) && !codeStr.includes('[');
+                            const isShortForeignPhrase =
+                              (inline || !match) &&
+                              codeStr.length < 65 &&
+                              !/[\u0600-\u06FF]/.test(codeStr) &&
+                              /[\p{L}]/u.test(codeStr) &&
+                              !codeStr.includes('[');
 
                             return !inline && match ? (
                               <div className="relative group rounded-xl overflow-hidden my-7 border border-slate-800 shadow-xl" dir="ltr">
@@ -1934,16 +2186,16 @@ const Classroom = () => {
                               </div>
                             ) : (
                               <code
-                                onClick={() => isShortEnglishPhrase && handlePlayAudioText(codeStr.replace(/\.\.\./g, ''), 0.9, `inline_${codeStr}`)}
+                                onClick={() => isShortForeignPhrase && handlePlayAudioText(codeStr.replace(/\.\.\./g, ''), 0.9, `inline_${codeStr}`)}
                                 className={`code-font bg-slate-800/90 text-emerald-300 px-2 py-0.5 rounded-md text-[0.9em] border border-slate-700/60 mx-0.5 inline-flex items-center gap-1 ${
-                                  isShortEnglishPhrase ? 'cursor-pointer hover:bg-purple-900/50 hover:border-purple-400 hover:text-white transition-all' : ''
+                                  isShortForeignPhrase ? 'cursor-pointer hover:bg-purple-900/50 hover:border-purple-400 hover:text-white transition-all' : ''
                                 }`}
                                 dir="ltr"
-                                title={isShortEnglishPhrase ? 'اضغط لسماع النطق الصوتي 🔊' : ''}
+                                title={isShortForeignPhrase ? `اضغط لسماع النطق باللغة ${activeLangConfig.nameAr} 🔊` : ''}
                                 {...props}
                               >
                                 {children}
-                                {isShortEnglishPhrase && <Volume2 size={11} className="text-purple-400 shrink-0" />}
+                                {isShortForeignPhrase && <Volume2 size={11} className="text-purple-400 shrink-0" />}
                               </code>
                             )
                           }
@@ -1978,7 +2230,7 @@ const Classroom = () => {
                               <tr key={rIdx} className="hover:bg-slate-900/40">
                                 <td className="p-3.5 text-red-200/90 bg-red-950/10">{row.wrong}</td>
                                 <td className="p-3.5 text-emerald-200 font-semibold bg-emerald-950/10">{row.right}</td>
-                                <td className="p-3.5 text-slate-300 text-xs leading-relaxed">{row.reason || 'تطبيق قاعدة مكعبات الجملة الإنجليزية السليمة.'}</td>
+                                <td className="p-3.5 text-slate-300 text-xs leading-relaxed">{row.reason || `تطبيق القاعدة الصحيحة في اللغة ${activeLangConfig.nameAr}.`}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -1988,7 +2240,7 @@ const Classroom = () => {
                   )}
 
                   {/* ======================================================= */}
-                  {/* 🎙️🔥 4. استوديو "Speak Class" الثلاثي الاحترافي */}
+                  {/* 🎙️🔥 4. استوديو "Speak Class" الثلاثي الاحترافي (متعدد اللغات) */}
                   {/* ======================================================= */}
                   {(isLanguageLesson || visualWidgets.voicePrompt) && (
                     <div className="mt-12 bg-gradient-to-br from-[#0f172a] via-[#0b1120] to-[#131129] border-2 border-indigo-500/40 rounded-3xl p-6 md:p-8 shadow-[0_0_60px_rgba(99,102,241,0.12)] space-y-6">
@@ -2007,17 +2259,17 @@ const Classroom = () => {
                           <div>
                             <div className="flex flex-wrap items-center gap-2 mb-1">
                               <span className="text-[11px] font-black bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 px-2.5 py-0.5 rounded-full">
-                                🎙️ LIVE SPEAK CLASS
+                                🎙️ LIVE SPEAK CLASS ({activeLangConfig.flag} {activeLangConfig.nameAr})
                               </span>
                               <span className="text-[11px] font-bold text-indigo-300 bg-indigo-500/10 px-2.5 py-0.5 rounded-full border border-indigo-500/20">
                                 متكيف مع مستوى: {activeLesson.section}
                               </span>
                             </div>
                             <h3 className="heading-font text-xl md:text-2xl font-black text-white">
-                              غرفة المحادثة الحية: {activeLesson.title}
+                              غرفة المحادثة الحية باللغة {activeLangConfig.nameAr}: {activeLesson.title}
                             </h3>
                             <p className="text-xs text-slate-400 mt-1">
-                              اختر نوع الغرفة التدريبية بالأسفل، وتحدث باستخدام تقنية <strong className="text-emerald-300">اضغط مطولاً للتحدث (Push-to-Talk)</strong>!
+                              اختر نوع الغرفة التدريبية بالأسفل، وتحدث باللغة {activeLangConfig.nameAr} باستخدام تقنية <strong className="text-emerald-300">اضغط مطولاً للتحدث (Push-to-Talk)</strong>!
                             </p>
                           </div>
                         </div>
@@ -2097,10 +2349,10 @@ const Classroom = () => {
                             </div>
                             <div>
                               <span className="text-xs font-bold text-indigo-300 block">
-                                👩‍🏫 مسار حصة الأستاذ الخصوصي (Guided 5-Step Speak Class):
+                                👩‍🏫 مسار حصة الأستاذ الخصوصي للغة {activeLangConfig.nameAr} (Guided 5-Step Speak Class):
                               </span>
                               <p className="text-xs text-slate-300 mt-0.5">
-                                الأستاذ يسير معك في 5 أسئلة تفاعلية متدرجة لضبط النطق، الوصل الصوتي (Connected Speech)، وتكوين الجمل.
+                                الأستاذ يسير معك في 5 أسئلة تفاعلية متدرجة لضبط النطق، الوصل الصوتي، وتكوين الجمل باللغة {activeLangConfig.nameAr}.
                               </p>
                             </div>
                           </div>
@@ -2124,7 +2376,7 @@ const Classroom = () => {
                               <Compass size={15} /> 🎬 بطاقة المشهد التمثيلي الحي (Live Roleplay Scenario):
                             </span>
                             <span className="text-[11px] bg-purple-500/20 text-purple-200 px-2.5 py-0.5 rounded-full font-bold">
-                              حوار تمثيلي واقعي 100%
+                              حوار تمثيلي واقعي باللغة {activeLangConfig.nameAr}
                             </span>
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 text-xs">
@@ -2208,13 +2460,13 @@ const Classroom = () => {
                           <div className="max-w-lg mx-auto space-y-2">
                             <h4 className="heading-font font-black text-white text-lg md:text-xl">
                               {speakClassMode === 'roleplay'
-                                ? 'جاهز لبدء تمثيل الموقف الواقعي (Roleplay)؟'
+                                ? `جاهز لبدء تمثيل الموقف الواقعي باللغة ${activeLangConfig.nameAr}؟`
                                 : speakClassMode === 'mission'
-                                  ? 'جاهز لبدء تحدي قنص وتوظيف مفردات الدرس؟'
-                                  : 'جاهز لبدء حصة المحادثة والمناقشة (5 خطوات)؟'}
+                                  ? `جاهز لبدء تحدي قنص وتوظيف مفردات اللغة ${activeLangConfig.nameAr}؟`
+                                  : `جاهز لبدء حصة المحادثة باللغة ${activeLangConfig.nameAr} (5 خطوات)؟`}
                             </h4>
                             <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
-                              اضغط على الزر بالأسفل ليبدأ المدرب الصوتي فوراً بالتحدث معك على مستوى <strong className="text-white">({activeLesson.section})</strong>!
+                              اضغط على الزر بالأسفل ليبدأ المدرب الصوتي فوراً بالتحدث معك باللغة {activeLangConfig.nameAr} على مستوى <strong className="text-white">({activeLesson.section})</strong>!
                             </p>
                           </div>
                           <button
@@ -2263,7 +2515,7 @@ const Classroom = () => {
                                         <div className="bg-slate-950/90 border border-emerald-400/40 rounded-xl p-3 flex items-center justify-between gap-3" dir="ltr">
                                           <div>
                                             <span className="text-[10px] font-black text-emerald-400 uppercase tracking-wider block">
-                                              ✨ Native Upgrade For Your Reply (كيف نصوغ جملتك أنت كمتحدث أصلي):
+                                              ✨ Native {activeLangConfig.nameEn} Upgrade (كيف نصوغ جملتك كمتحدث أصلي):
                                             </span>
                                             <p className="text-xs sm:text-sm font-bold text-white mt-0.5">
                                               "{msg.studentUpgrade}"
@@ -2357,7 +2609,7 @@ const Classroom = () => {
                                           {msg.questionEnglish && (
                                             <div className="bg-slate-950/90 border border-indigo-500/30 rounded-xl p-3.5 space-y-1.5">
                                               <span className="text-[10px] font-black text-indigo-400 uppercase tracking-wider block">
-                                                ❓ السؤال أو الموقف الموجه لك الآن:
+                                                ❓ السؤال أو الموقف الموجه لك الآن ({activeLangConfig.nameAr}):
                                               </span>
                                               <p className="text-base md:text-[17.5px] font-black text-white leading-relaxed" dir="ltr">
                                                 {msg.questionEnglish}
@@ -2380,7 +2632,7 @@ const Classroom = () => {
                                             <div className="bg-indigo-950/35 border border-indigo-500/35 rounded-xl p-3 flex items-center justify-between gap-3" dir="ltr">
                                               <div>
                                                 <span className="text-[10px] font-black text-indigo-300 uppercase tracking-wider block">
-                                                  🎯 مثال لإجابة أصيلة على هذا السؤال الجديد (Model Answer For This Question):
+                                                  🎯 مثال لإجابة أصيلة باللغة {activeLangConfig.nameAr} على هذا السؤال:
                                                 </span>
                                                 <p className="text-xs sm:text-sm font-bold text-emerald-300 mt-0.5">
                                                   "{msg.modelAnswerForQuestion}"
@@ -2409,7 +2661,7 @@ const Classroom = () => {
                                 <div className="bg-rose-950/40 border-2 border-rose-500/60 text-white rounded-2xl p-4 max-w-[85%] space-y-2 shadow-[0_0_25px_rgba(244,63,94,0.25)]">
                                   <div className="flex items-center gap-2 text-xs font-bold text-rose-300">
                                     <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
-                                    <span>جاري التقاط صوتك مباشرة... (ارفع إصبعك للإرسال)</span>
+                                    <span>جاري التقاط صوتك باللغة {activeLangConfig.nameAr}... (ارفع إصبعك للإرسال)</span>
                                   </div>
                                   <p className="text-base font-bold text-emerald-300 min-h-[24px]" dir="ltr">
                                     {liveInterimTranscript || 'Listening to your voice...'}
@@ -2420,7 +2672,7 @@ const Classroom = () => {
 
                             {isCoachThinking && (
                               <div className="flex items-center gap-2.5 text-xs font-bold text-indigo-300 bg-slate-900/90 border border-indigo-500/30 px-4 py-3 rounded-xl w-fit animate-pulse">
-                                <Bot size={16} className="text-emerald-400" /> جاري تحليل نطقك وتجهيز الخطوة الحوارية التالية...
+                                <Bot size={16} className="text-emerald-400" /> جاري تحليل نطقك باللغة {activeLangConfig.nameAr} وتجهيز الخطوة التالية...
                               </div>
                             )}
                             <div ref={voiceChatEndRef} />
@@ -2429,7 +2681,7 @@ const Classroom = () => {
                           {suggestedReplies.length > 0 && (
                             <div className="bg-slate-950/90 border border-slate-800 rounded-2xl p-3.5 space-y-2">
                               <span className="text-[11px] font-bold text-amber-400 flex items-center gap-1.5">
-                                <Lightbulb size={13} /> 💡 ردود مقترحة للسؤال الحالي (اسمعها بـ 🔊 وتدرب على نطقها بالمايكروفون، أو اضغط عليها):
+                                <Lightbulb size={13} /> 💡 ردود مقترحة باللغة {activeLangConfig.nameAr} للسؤال الحالي (اسمعها بـ 🔊 أو اضغط عليها):
                               </span>
                               <div className="flex flex-wrap gap-2" dir="ltr">
                                 {suggestedReplies.map((sug, sIdx) => (
@@ -2468,7 +2720,7 @@ const Classroom = () => {
                                 className="heading-font flex-1 py-4 px-6 rounded-xl font-black text-sm md:text-base flex items-center justify-center gap-3 bg-gradient-to-l from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 shadow-[0_0_25px_rgba(16,185,129,0.35)] active:scale-[0.99] transition-all select-none cursor-pointer"
                               >
                                 <Mic size={22} />
-                                <span>🎙️ اضغط مطولاً للتحدث بالإنجليزية (أو اضغط مرة للتسجيل الحر)</span>
+                                <span>🎙️ اضغط مطولاً للتحدث باللغة {activeLangConfig.nameAr} (أو اضغط مرة للتسجيل الحر)</span>
                               </button>
                             ) : (
                               <button
@@ -2483,7 +2735,7 @@ const Classroom = () => {
                                   <span className="w-1 bg-white rounded-full wave-bar" style={{ animationDelay: '0.2s' }} />
                                   <span className="w-1 bg-white rounded-full wave-bar" style={{ animationDelay: '0.4s' }} />
                                 </div>
-                                <span>🔴 جاري الاستماع... ارفع إصبعك (أو اضغط هنا) لإرسال ردك</span>
+                                <span>🔴 جاري الاستماع ({activeLangConfig.nameAr})... ارفع إصبعك (أو اضغط هنا) لإرسال ردك</span>
                               </button>
                             )}
 
@@ -2501,7 +2753,7 @@ const Classroom = () => {
                                 type="text"
                                 value={coachTextInput}
                                 onChange={(e) => setCoachTextInput(e.target.value)}
-                                placeholder="Or type your reply here..."
+                                placeholder={`Type in ${activeLangConfig.nameEn}...`}
                                 className="flex-1 bg-[#060b16] border border-slate-700 focus:border-indigo-500 rounded-xl px-3.5 py-3.5 text-xs text-white outline-none"
                               />
                               <button
@@ -2520,7 +2772,7 @@ const Classroom = () => {
                   )}
 
                   {/* ======================================================= */}
-                  {/* 🎧🃏🧩 5. المختبر الصوتي التفاعلي ثلاثي الأطوار */}
+                  {/* 🎧🃏🧩 5. المختبر الصوتي التفاعلي ثلاثي الأطوار (متعدد اللغات) */}
                   {/* ======================================================= */}
                   {activeLesson.codeSnippet && activeLesson.codeSnippet.trim() !== '' && (
                     <div className="mt-12 mb-12 pt-8 border-t border-slate-800/70">
@@ -2530,10 +2782,10 @@ const Classroom = () => {
                           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800 pb-4">
                             <div>
                               <span className="text-xs font-bold text-purple-400 flex items-center gap-1.5 mb-1">
-                                <Headphones size={15} /> Interactive Language & Phonics Studio
+                                <Headphones size={15} /> Interactive {activeLangConfig.nameEn} Phonics & Audio Studio ({activeLangConfig.flag})
                               </span>
                               <h3 className="heading-font text-xl md:text-2xl font-bold text-white">
-                                🎧 استوديو الصوتيات، بطاقات الذاكرة، ولعبة تركيب المكعبات
+                                🎧 استوديو الصوتيات ({activeLangConfig.nameAr})، بطاقات الذاكرة، ولعبة تركيب المكعبات
                               </h3>
                             </div>
 
@@ -2563,7 +2815,7 @@ const Classroom = () => {
                             <>
                               <div className="flex flex-wrap items-center justify-between gap-2">
                                 <p className="text-xs text-slate-400">
-                                  استمع لكل كلمة أو جملة بـ 3 سرعات، ثم اضغط على زر <strong className="text-rose-300">🎤 انطق</strong> لاختبار نطقك بالمايكروفون:
+                                  استمع لكل كلمة أو جملة باللغة {activeLangConfig.nameAr} بـ 3 سرعات، ثم اضغط على زر <strong className="text-rose-300">🎤 انطق</strong> لاختبار نطقك بالمايكروفون:
                                 </p>
                                 <div className="flex items-center gap-2">
                                   <button
@@ -2597,7 +2849,7 @@ const Classroom = () => {
                                   <thead>
                                     <tr className="bg-slate-900 border-b border-slate-800 text-xs font-bold text-slate-400">
                                       <th className="p-3.5 w-10 text-center">#</th>
-                                      <th className="p-3.5">الكلمة / الجملة الإنجليزية</th>
+                                      <th className="p-3.5">الكلمة / الجملة ({activeLangConfig.nameAr})</th>
                                       <th className="p-3.5">الرمز الصوتي (IPA)</th>
                                       <th className="p-3.5">المعنى بالعربية</th>
                                       <th className="p-3.5 text-center">استمع (3 سرعات) + اختبر نطقك</th>
@@ -2673,7 +2925,7 @@ const Classroom = () => {
                             <div className="bg-slate-950 border border-slate-800 rounded-2xl p-6 text-center space-y-5">
                               <div className="flex items-center justify-between text-xs text-slate-400">
                                 <span>بطاقة الذاكرة {activeCardIdx + 1} من {audioStudioItems.length}</span>
-                                <span>اضغط على البطاقة لقلبها أو لسماع النطق 🔊</span>
+                                <span>اضغط على البطاقة لقلبها أو لسماع النطق باللغة {activeLangConfig.nameAr} 🔊</span>
                               </div>
 
                               <div
@@ -2705,7 +2957,7 @@ const Classroom = () => {
                                       {currentFlashcard.sentence}
                                     </p>
                                     <span className="text-[11px] text-slate-400 mt-4">
-                                      اضغط للعودة للوجه الإنجليزي
+                                      اضغط للعودة لوجه اللغة {activeLangConfig.nameAr}
                                     </span>
                                   </>
                                 )}
@@ -2750,7 +3002,7 @@ const Classroom = () => {
                               <div className="flex items-center justify-between flex-wrap gap-2">
                                 <div>
                                   <span className="text-xs font-bold text-amber-400 block">
-                                    🧩 التحدي {builderTargetIdx + 1} من {audioStudioItems.length}: ركب باللمس ما يعبر عن:
+                                    🧩 التحدي {builderTargetIdx + 1} من {audioStudioItems.length}: ركب باللمس ما يعبر باللغة {activeLangConfig.nameAr} عن:
                                   </span>
                                   <h4 className="heading-font text-lg font-black text-white mt-1">
                                     {currentBuilderItem.emoji} المعنى المطلوب: "{currentBuilderItem.meaning}"
@@ -2913,7 +3165,7 @@ const Classroom = () => {
                       <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
                         <h3 className="heading-font text-xl md:text-2xl font-bold text-indigo-400 flex items-center gap-2.5">
                           {isLanguageLesson ? <PenTool size={24} /> : <Terminal size={24} />}
-                          {isLanguageLesson ? 'ورشة الإملاء وتركيب الجمل التفاعلية (جرب بنفسك!)' : 'مختبر كتابة الكود التفاعلي (جرب بنفسك!)'}
+                          {isLanguageLesson ? `ورشة الإملاء وتركيب الجمل باللغة ${activeLangConfig.nameAr} (جرب بنفسك!)` : 'مختبر كتابة الكود التفاعلي (جرب بنفسك!)'}
                         </h3>
                         <span className="text-xs bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 px-3 py-1 rounded-full font-semibold">
                           تطبيق عملي مدعوم بـ {activeLesson.codingPractice.hints?.length || 3} تلميحات
@@ -2928,7 +3180,7 @@ const Classroom = () => {
                         <div className="bg-[#0b1120] px-4 py-2.5 text-xs code-font text-slate-400 border-b border-slate-800 flex justify-between items-center">
                           <span className="flex items-center gap-2">
                             <Code size={14} className="text-emerald-400"/> 
-                            {isLanguageLesson ? 'Lego Sentence & Spelling Workspace' : 'مساحة كتابة الكود الخاصة بك'}
+                            {isLanguageLesson ? `Lego Sentence & Spelling Workspace (${activeLangConfig.nameEn})` : 'مساحة كتابة الكود الخاصة بك'}
                           </span>
                           <button 
                             type="button"
@@ -2943,7 +3195,7 @@ const Classroom = () => {
                           onChange={(e) => setStudentCode(e.target.value)}
                           rows={6}
                           dir="ltr"
-                          placeholder={isLanguageLesson ? "// Write your English words or sentences here..." : "// اكتب الكود المطلوب هنا..."}
+                          placeholder={isLanguageLesson ? `// Write your ${activeLangConfig.nameEn} words or sentences here...` : "// اكتب الكود المطلوب هنا..."}
                           className="w-full bg-[#04070e] text-emerald-300 code-font text-[14.5px] p-4 outline-none resize-y leading-[1.7]"
                         />
                       </div>
@@ -3008,7 +3260,7 @@ const Classroom = () => {
                                 onClick={() => handlePlayAudioText(activeLesson.codingPractice.solutionCode, 0.9, 'solution_audio')}
                                 className="bg-emerald-500/20 hover:bg-emerald-500 text-emerald-200 hover:text-slate-950 px-2.5 py-0.5 rounded text-[11px] font-bold flex items-center gap-1"
                               >
-                                <Volume2 size={12} /> استمع للحل الصحيح
+                                <Volume2 size={12} /> استمع للحل الصحيح ({activeLangConfig.nameAr})
                               </button>
                             )}
                           </div>
