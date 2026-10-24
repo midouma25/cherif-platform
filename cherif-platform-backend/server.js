@@ -490,7 +490,8 @@ const lessonSchema = new mongoose.Schema({
     }],
 
     created_at: { type: Date, default: Date.now }
-});
+},
+{ strict: false });
 
 const Lesson = mongoose.model('Lesson', lessonSchema);
 
@@ -502,23 +503,27 @@ app.get('/api/courses/:courseId/lessons', async (req, res) => {
     try {
         const lessons = await Lesson.find({ courseId: req.params.courseId }).sort({ order: 1 });
 
-        const safeLessons = lessons.map(lesson => ({
-            _id: lesson._id,
-            title: lesson.title,
-            description: lesson.description,
-            type: lesson.type || 'video',
-            lessonCategory: lesson.lessonCategory || 'standard',
-            content: lesson.content,
-            isFreePreview: lesson.isFreePreview,
-            order: lesson.order,
-            section: lesson.section || 'الوحدة 1: الأساسيات',
-            videoUrl: lesson.isFreePreview ? lesson.videoUrl : null,
-            codeSnippet: lesson.codeSnippet || "",
-            codeExplanation: lesson.codeExplanation || "",
-            dailyQuest: lesson.dailyQuest || null,
-            codingPractice: lesson.codingPractice || null,
-            bossQuiz: (lesson.bossQuiz && lesson.bossQuiz.length > 0) ? lesson.bossQuiz : []
-        }));
+const safeLessons = lessons.map(lesson => {
+            const rawObj = lesson.toObject ? lesson.toObject() : lesson;
+            return {
+                ...rawObj,
+                _id: lesson._id,
+                title: lesson.title,
+                description: lesson.description,
+                type: lesson.type || 'video',
+                lessonCategory: lesson.lessonCategory || 'standard',
+                content: lesson.content,
+                isFreePreview: lesson.isFreePreview,
+                order: lesson.order,
+                section: lesson.section || 'الوحدة 1: الأساسيات',
+                videoUrl: lesson.isFreePreview ? lesson.videoUrl : null,
+                codeSnippet: lesson.codeSnippet || "",
+                codeExplanation: lesson.codeExplanation || "",
+                dailyQuest: lesson.dailyQuest || null,
+                codingPractice: lesson.codingPractice || null,
+                bossQuiz: (lesson.bossQuiz && lesson.bossQuiz.length > 0) ? lesson.bossQuiz : []
+            };
+        });
 
         res.json({ success: true, lessons: safeLessons });
     } catch (error) {
@@ -554,9 +559,23 @@ app.post('/api/courses/:courseId/lessons', verifyInstructor, async (req, res) =>
     }
 });
 
-app.put('/api/lessons/:lessonId', async (req, res) => {
+// استبدل مسار app.put('/api/lessons/:lessonId') في server_4.js بهذا المسار المحصن:
+app.put('/api/lessons/:lessonId', verifyInstructor, async (req, res) => {
     try {
-        const updatedLesson = await Lesson.findByIdAndUpdate(req.params.lessonId, req.body, { new: true });
+        const lesson = await Lesson.findById(req.params.lessonId);
+        if (!lesson) return res.status(404).json({ error: 'الدرس غير موجود' });
+
+        const course = await Course.findById(lesson.courseId);
+        if (course && course.instructor.toString() !== req.user.id && req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'غير مصرح لك بتعديل دروس هذا الكورس' });
+        }
+
+        const { _id, courseId, ...updateFields } = req.body;
+        const updatedLesson = await Lesson.findByIdAndUpdate(
+            req.params.lessonId,
+            { $set: updateFields },
+            { new: true }
+        );
         res.json({ success: true, lesson: updatedLesson });
     } catch (error) {
         res.status(500).json({ error: 'فشل في تحديث الدرس' });

@@ -10,7 +10,8 @@ import {
   Swords, Zap, Skull, Flame, ShieldAlert, RefreshCw, BrainCircuit, 
   Lightbulb, ChevronDown, Microscope, Trophy, Award, Sparkles, Eye, EyeOff, Bot,
   Volume2, Headphones, Mic, Copy, Check, Square, Upload, Puzzle, PenTool,
-  Target, Layers, RotateCcw, PhoneCall, PhoneOff, Send, MessageCircle, Radio, Compass, UserCheck
+  Target, Layers, RotateCcw, PhoneCall, PhoneOff, Send, MessageCircle, Radio, Compass, UserCheck,
+  Stethoscope, Plus, Trash2, Edit3
 } from 'lucide-react';
 
 // ============================================================================
@@ -75,12 +76,12 @@ const resolveLanguageConfig = (contextStr = '', sampleText = '') => {
 };
 
 // ============================================================================
-// 🧹 0.5 منقي النصوص التلقائي الشامل (يصلح حتى ملفات JSON المولدة سابقاً فوراً!)
+// 🧹 0.5 منقي النصوص التلقائي الشامل
 // ============================================================================
 const sanitizeLessonMarkdown = (raw = '', stripRawPromptSection = false) => {
   if (!raw) return '';
   let cleaned = raw
-    .replace(/[\u0900-\u097F]+/g, '') // إزالة أي رموز هندية عابرة مثل (وड़ने)
+    .replace(/[\u0900-\u097F]+/g, '')
     .replace(/פּ/g, 'پ')
     .replace(/c'هست/gi, "c'est")
     .replace(/C'هست/g, "C'est")
@@ -100,7 +101,7 @@ const sanitizeLessonMarkdown = (raw = '', stripRawPromptSection = false) => {
   return cleaned;
 };
 
-// 🎨 كاشف الجنس النحوي التلقائي لتلوين الكلمات المذكرة (🔵) والمؤنثة (🔴) في الفرنسية والإسبانية والألمانية
+// 🎨 كاشف الجنس النحوي التلقائي لتلوين الكلمات المذكرة (🔵) والمؤنثة (🔴)
 const detectGrammaticalGenderBadge = (text = '') => {
   const trimmed = (text || '').trim().toLowerCase();
   if (/^(un|le|du|mon|ton|son|ce|cet|el|un|der|ein)\s+/i.test(trimmed) || trimmed.includes('🔵')) {
@@ -111,7 +112,6 @@ const detectGrammaticalGenderBadge = (text = '') => {
   }
   return null;
 };
-
 
 // ============================================================================
 // 🎧 1. محلل استوديو الاستماع والترديد (يدعم جميع اللغات)
@@ -161,7 +161,7 @@ const parseAudioShadowingSnippet = (rawSnippet = '') => {
 };
 
 // ============================================================================
-// 🧩 2. مستخرج مكعبات الليغو، سُلّم البناء، جدول الأخطاء، ومفردات الدرس (متعدد اللغات)
+// 🧩 2. مستخرج مكعبات الليغو، سُلّم البناء، جدول الأخطاء، ومفردات الدرس
 // ============================================================================
 const extractLanguageVisualWidgets = (rawMarkdown = '') => {
   const markdown = sanitizeLessonMarkdown(rawMarkdown, false);
@@ -187,7 +187,6 @@ const extractLanguageVisualWidgets = (rawMarkdown = '') => {
       }
     }
 
-    // استخراج القوالب الكلامية لجميع اللغات (بما فيها الفرنسية، الألمانية، الإسبانية، اليابانية، الصينية)
     const backtickMatches = trimmed.match(/`([^\u0600-\u06FF`]{2,45})`/g);
     if (backtickMatches) {
       backtickMatches.forEach(m => {
@@ -233,7 +232,6 @@ const extractLanguageVisualWidgets = (rawMarkdown = '') => {
     ladderLines.forEach(l => {
       if (/^(?:\d+\.|[-*])\s*\**الدرجة|^-\s*[^\u0600-\u06FF]/.test(l)) {
         const cleanStep = l.replace(/^(?:\d+\.|[-*])\s*/, '').replace(/\*\*/g, '').replace(/`/g, '').trim();
-        // استخراج النص الأجنبي من الدرجة (فرنسي، إنجليزي، ألماني، إسباني، ياباني، صيني)
         const foreignMatch = cleanStep.match(/([A-Za-z\u00C0-\u024F\u3040-\u30ff\u4e00-\u9faf][A-Za-z\u00C0-\u024F\u3040-\u30ff\u4e00-\u9faf\s,.?!'’¿¡-]+)/);
         ladderSteps.push({
           rawText: cleanStep,
@@ -283,6 +281,598 @@ const cleanCourseTitleText = (title = '') => {
     .trim();
 };
 
+// ============================================================================
+// 🧩 مكوّن "املأ الفراغ التفاعلي" في منتصف الدرس (Mid-Lesson Interactive Fill-in-the-Blank)
+// ============================================================================
+const InlineFillBlankSentence = ({ rawText, onSpeak }) => {
+  const [selectedChoice, setSelectedChoice] = useState(null);
+
+  const match = rawText.match(/\[\[([^\]]+)\]\]/);
+  if (!match) return <span>{rawText}</span>;
+
+  const beforeBlank = rawText.slice(0, match.index);
+  const afterBlank = rawText.slice(match.index + match[0].length);
+  const rawOptions = match[1].split('|').map(s => s.trim()).filter(Boolean);
+  const correctOption = rawOptions[0] || '';
+
+  const shuffledOptions = useMemo(() => {
+    return [...rawOptions].sort((a, b) => a.localeCompare(b));
+  }, [match[1]]);
+
+  const isCorrect = selectedChoice === correctOption;
+  const fullCompletedSentence = `${beforeBlank}${correctOption}${afterBlank}`.replace(/\([^)]*[\u0600-\u06FF]+[^)]*\)/g, '').trim();
+
+  return (
+    <div className="my-3 p-4 rounded-2xl bg-slate-950/95 border-2 border-amber-500/35 shadow-lg space-y-3" dir="auto">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="text-base md:text-[17px] font-bold text-white leading-relaxed flex flex-wrap items-center gap-1.5">
+          <span>{beforeBlank}</span>
+          <span
+            className={`inline-flex items-center px-3.5 py-1 rounded-xl font-black text-sm border-2 transition-all ${
+              !selectedChoice
+                ? 'bg-slate-900 border-dashed border-amber-400/60 text-amber-300'
+                : isCorrect
+                  ? 'bg-emerald-500/25 border-emerald-400 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.3)]'
+                  : 'bg-rose-500/25 border-rose-400 text-rose-300'
+            }`}
+          >
+            {selectedChoice || '........'}
+          </span>
+          <span>{afterBlank}</span>
+        </div>
+
+        {onSpeak && (
+          <button
+            type="button"
+            onClick={() => onSpeak(fullCompletedSentence, 0.9, `blank_${correctOption}`)}
+            className="bg-purple-500/20 hover:bg-purple-600 text-purple-300 hover:text-white px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 border border-purple-500/30 transition-all shrink-0"
+            title="اسمع الجملة كاملة"
+          >
+            <Volume2 size={13} /> اسمع
+          </button>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 pt-1" dir="ltr">
+        <span className="text-[11px] font-bold text-slate-400 mr-1">اختر الإجابة الصحيحة:</span>
+        {shuffledOptions.map((opt, idx) => {
+          const isPicked = selectedChoice === opt;
+          const isOptCorrect = opt === correctOption;
+          return (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => {
+                setSelectedChoice(opt);
+                if (opt === correctOption && onSpeak) {
+                  onSpeak(fullCompletedSentence, 0.95, `blank_win_${opt}`);
+                }
+              }}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-black border transition-all ${
+                isPicked
+                  ? isOptCorrect
+                    ? 'bg-emerald-500 text-slate-950 border-emerald-400 scale-105'
+                    : 'bg-rose-600 text-white border-rose-400'
+                  : 'bg-slate-900 hover:bg-slate-800 text-slate-200 border-slate-700 hover:border-amber-400'
+              }`}
+            >
+              {opt}
+            </button>
+          );
+        })}
+
+        {selectedChoice && (
+          <span className={`text-xs font-bold mr-auto ${isCorrect ? 'text-emerald-400' : 'text-rose-400'}`}>
+            {isCorrect ? '✅ إجابة صحيحة! أحسنت!' : '❌ جرب خياراً آخر!'}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
+// 🩺🛠️ شريط الجراحة العالمي لجميع عناصر الدرس الأخيرة والعلوية (Universal Widget Surgeon Bar)
+// ============================================================================
+const WidgetSurgeonBar = ({
+  widgetTitle,
+  widgetType,
+  initialData,
+  onSaveManual,
+  onRunAiEdit,
+  onDeleteWidget,
+  isOperating
+}) => {
+  const [mode, setMode] = useState(null);
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [draft, setDraft] = useState(initialData);
+
+  useEffect(() => {
+    setDraft(initialData);
+  }, [initialData, mode]);
+
+  const handleSave = () => {
+    onSaveManual(draft);
+    setMode(null);
+  };
+
+  const handleAiSubmit = async (customText = null) => {
+    const instruction = customText || aiPrompt;
+    if (!instruction || !instruction.trim()) return;
+    await onRunAiEdit(instruction);
+    setMode(null);
+    setAiPrompt('');
+  };
+
+  if (!window.__CHERIF_CAN_EDIT_COURSE__) return null;
+
+  return (
+    <div className="mb-4 pb-3 border-b border-slate-800/80">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
+          🛠️ تحكم العنصر: <strong className="text-slate-200">{widgetTitle}</strong>
+        </span>
+
+        <div className="flex flex-wrap items-center gap-1.5">
+          {onSaveManual && (
+            <button
+              type="button"
+              onClick={() => setMode(mode === 'manual' ? null : 'manual')}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all ${
+                mode === 'manual'
+                  ? 'bg-amber-500 text-slate-950 border-amber-400'
+                  : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-700'
+              }`}
+            >
+              ✏️ {mode === 'manual' ? 'إلغاء اليدوي' : 'تعديل يدوي'}
+            </button>
+          )}
+
+          {onRunAiEdit && (
+            <button
+              type="button"
+              onClick={() => setMode(mode === 'ai' ? null : 'ai')}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all ${
+                mode === 'ai'
+                  ? 'bg-indigo-600 text-white border-indigo-400'
+                  : 'bg-indigo-500/15 hover:bg-indigo-600 text-indigo-300 hover:text-white border-indigo-500/30'
+              }`}
+            >
+              🤖 تعديل بالـ AI
+            </button>
+          )}
+
+          {onDeleteWidget && (
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm(`هل أنت متأكد من حذف (${widgetTitle}) من هذا الدرس؟ (يمكنك التراجع بزر تراجع في الأعلى)`)) {
+                  onDeleteWidget();
+                }
+              }}
+              className="bg-rose-500/15 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/30 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all"
+            >
+              🗑️ حذف
+            </button>
+          )}
+        </div>
+      </div>
+
+      {mode === 'ai' && (
+        <div className="mt-3 p-3.5 rounded-xl bg-indigo-950/40 border border-indigo-500/40 space-y-2.5 animate-fade-in">
+          <label className="text-xs font-bold text-indigo-300 block">
+            🤖 ماذا تريد من الذكاء الاصطناعي أن يعدل أو يضيف في ({widgetTitle})؟
+          </label>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input
+              type="text"
+              value={aiPrompt}
+              onChange={(e) => setAiPrompt(e.target.value)}
+              placeholder={`مثال: طور (${widgetTitle})، أو أضف أمثلة وتمارين جديدة تناسب مستوى الدرس...`}
+              className="flex-1 bg-slate-950 border border-slate-700 focus:border-indigo-400 rounded-xl px-3.5 py-2 text-xs text-white outline-none"
+            />
+            <button
+              type="button"
+              disabled={isOperating || !aiPrompt.trim()}
+              onClick={() => handleAiSubmit()}
+              className="bg-indigo-500 hover:bg-indigo-400 text-white font-black text-xs px-4 py-2 rounded-xl transition-all disabled:opacity-50"
+            >
+              {isOperating ? '⏳ جاري التحديث...' : '⚡ نفّذ بالـ AI'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {mode === 'manual' && (
+        <div className="mt-3 p-4 rounded-xl bg-slate-950 border-2 border-amber-500/50 space-y-3 animate-fade-in">
+          {(widgetType === 'audio_studio' || widgetType === 'code_explanation' || widgetType === 'lego' || widgetType === 'ladder') && (
+            <div>
+              <label className="text-xs font-bold text-amber-300 block mb-1.5">
+                ✏️ حرر محتوى ({widgetTitle}) مباشرة:
+              </label>
+              <textarea
+                value={typeof draft === 'string' ? draft : JSON.stringify(draft, null, 2)}
+                onChange={(e) => setDraft(e.target.value)}
+                rows={8}
+                dir="auto"
+                className="w-full bg-[#050811] border border-slate-700 rounded-xl p-3.5 text-xs sm:text-sm text-emerald-300 font-mono leading-relaxed outline-none"
+              />
+            </div>
+          )}
+
+          {widgetType === 'mistakes' && Array.isArray(draft) && (
+            <div className="space-y-2.5">
+              <label className="text-xs font-bold text-amber-300 block">
+                ✏️ تعديل صفوف جدول الأخطاء الشائعة:
+              </label>
+              {draft.map((row, idx) => (
+                <div key={idx} className="grid grid-cols-1 md:grid-cols-3 gap-2 bg-[#060b16] p-2.5 rounded-xl border border-slate-800">
+                  <input
+                    type="text"
+                    value={row.wrong || ''}
+                    onChange={(e) => {
+                      const copy = [...draft];
+                      copy[idx] = { ...copy[idx], wrong: e.target.value };
+                      setDraft(copy);
+                    }}
+                    placeholder="❌ الخطأ الشائع"
+                    className="bg-slate-950 border border-red-500/30 rounded-lg px-2.5 py-1.5 text-xs text-red-200 outline-none"
+                  />
+                  <input
+                    type="text"
+                    value={row.right || ''}
+                    onChange={(e) => {
+                      const copy = [...draft];
+                      copy[idx] = { ...copy[idx], right: e.target.value };
+                      setDraft(copy);
+                    }}
+                    placeholder="✅ الصواب الأصيل"
+                    className="bg-slate-950 border border-emerald-500/30 rounded-lg px-2.5 py-1.5 text-xs text-emerald-200 outline-none"
+                  />
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      value={row.reason || ''}
+                      onChange={(e) => {
+                        const copy = [...draft];
+                        copy[idx] = { ...copy[idx], reason: e.target.value };
+                        setDraft(copy);
+                      }}
+                      placeholder="💡 التفسير اللغوي"
+                      className="flex-1 bg-slate-950 border border-amber-500/30 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setDraft(draft.filter((_, i) => i !== idx))}
+                      className="bg-rose-500/20 hover:bg-rose-600 text-rose-300 hover:text-white px-2 py-1.5 rounded-lg text-xs font-bold"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setDraft([...draft, { wrong: '', right: '', reason: '' }])}
+                className="bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold px-3 py-1.5 rounded-lg"
+              >
+                + إضافة صف جديد للجدول
+              </button>
+            </div>
+          )}
+
+          {widgetType === 'coding_practice' && draft && typeof draft === 'object' && (
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-bold text-amber-300 block mb-1">📋 نص السؤال والمهام (taskQuestion):</label>
+                <textarea
+                  value={draft.taskQuestion || ''}
+                  onChange={(e) => setDraft({ ...draft, taskQuestion: e.target.value })}
+                  rows={4}
+                  className="w-full bg-[#050811] border border-slate-700 rounded-xl p-3 text-xs text-white outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-indigo-300 block mb-1">💻 النص الابتدائي في الخانة (starterCode):</label>
+                <textarea
+                  value={draft.starterCode || ''}
+                  onChange={(e) => setDraft({ ...draft, starterCode: e.target.value })}
+                  rows={3}
+                  dir="ltr"
+                  className="w-full bg-[#050811] border border-slate-700 rounded-xl p-3 text-xs text-emerald-300 font-mono outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-amber-400 block mb-1">💡 التلميحات (كل تلميح في سطر):</label>
+                <textarea
+                  value={Array.isArray(draft.hints) ? draft.hints.join('\n') : ''}
+                  onChange={(e) => setDraft({ ...draft, hints: e.target.value.split('\n') })}
+                  rows={3}
+                  className="w-full bg-[#050811] border border-slate-700 rounded-xl p-3 text-xs text-amber-200 outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-emerald-400 block mb-1">✅ الحل النموذجي (solutionCode):</label>
+                <textarea
+                  value={draft.solutionCode || ''}
+                  onChange={(e) => setDraft({ ...draft, solutionCode: e.target.value })}
+                  rows={4}
+                  dir="ltr"
+                  className="w-full bg-[#050811] border border-slate-700 rounded-xl p-3 text-xs text-emerald-300 font-mono outline-none"
+                />
+              </div>
+            </div>
+          )}
+
+          {widgetType === 'daily_quest' && draft && typeof draft === 'object' && (
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-bold text-amber-300 block mb-1">❓ نص سؤال التحدي السريع:</label>
+                <input
+                  type="text"
+                  value={draft.question || ''}
+                  onChange={(e) => setDraft({ ...draft, question: e.target.value })}
+                  className="w-full bg-[#050811] border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none"
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {(draft.options || ['', '', '', '']).map((opt, oIdx) => (
+                  <div key={oIdx} className="flex items-center gap-2 bg-[#050811] p-2 rounded-xl border border-slate-800">
+                    <input
+                      type="radio"
+                      name="correct_quest_opt"
+                      checked={Number(draft.correctAnswerIndex) === oIdx}
+                      onChange={() => setDraft({ ...draft, correctAnswerIndex: oIdx })}
+                      title="حدد كإجابة صحيحة"
+                    />
+                    <input
+                      type="text"
+                      value={opt}
+                      onChange={(e) => {
+                        const nextOpts = [...(draft.options || [])];
+                        nextOpts[oIdx] = e.target.value;
+                        setDraft({ ...draft, options: nextOpts });
+                      }}
+                      placeholder={`الخيار ${oIdx + 1}`}
+                      className="flex-1 bg-transparent text-xs text-white outline-none"
+                    />
+                  </div>
+                ))}
+              </div>
+              <div>
+                <label className="text-xs font-bold text-emerald-400 block mb-1">💡 شرح الإجابة الصحيحة:</label>
+                <textarea
+                  value={draft.explanation || ''}
+                  onChange={(e) => setDraft({ ...draft, explanation: e.target.value })}
+                  rows={2}
+                  className="w-full bg-[#050811] border border-slate-700 rounded-xl p-2.5 text-xs text-slate-200 outline-none"
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => setMode(null)}
+              className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold px-4 py-2 rounded-xl"
+            >
+              إلغاء
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs px-5 py-2 rounded-xl shadow"
+            >
+              💾 حفظ تعديل العنصر
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ============================================================================
+// 🧱 مكوّن تقسيم الدرس إلى عناصر وأقسام قابلة للتعديل اليدوي أو بالـ AI أو الحذف
+// ============================================================================
+const splitMarkdownIntoBlocks = (markdown = '') => {
+  if (!markdown) return [];
+  const cleaned = markdown.trim();
+  const parts = cleaned.split(/(?=\n###\s+|\n##\s+)/g);
+  return parts.map(p => p.trim()).filter(Boolean);
+};
+
+const EditableLessonBlocks = ({
+  rawMarkdown,
+  markdownComponents,
+  onSaveFullMarkdown,
+  onAiEditBlock,
+  isOperating
+}) => {
+  const blocks = useMemo(() => splitMarkdownIntoBlocks(rawMarkdown), [rawMarkdown]);
+  const [editingIdx, setEditingIdx] = useState(null);
+  const [manualText, setManualText] = useState('');
+  const [aiPromptIdx, setAiPromptIdx] = useState(null);
+  const [aiBlockInstruction, setAiBlockInstruction] = useState('');
+  const [loadingBlockIdx, setLoadingBlockIdx] = useState(null);
+
+  const handleSaveManualBlock = (idx) => {
+    const nextBlocks = [...blocks];
+    nextBlocks[idx] = manualText.trim();
+    onSaveFullMarkdown(nextBlocks.join('\n\n'), `تم تعديل القسم (${idx + 1}) يدوياً وحفظه!`);
+    setEditingIdx(null);
+  };
+
+  const handleDeleteBlock = (idx) => {
+    if (!window.confirm('هل أنت متأكد من حذف هذا القسم من الدرس؟ (يمكنك التراجع لاحقاً بزر تراجع)')) return;
+    const nextBlocks = blocks.filter((_, i) => i !== idx);
+    onSaveFullMarkdown(nextBlocks.join('\n\n'), `تم حذف القسم (${idx + 1}) من الدرس!`);
+  };
+
+  const handleRunAiOnBlock = async (idx, customPrompt = null) => {
+    const instruction = customPrompt || aiBlockInstruction;
+    if (!instruction || !instruction.trim()) return;
+    setLoadingBlockIdx(idx);
+    try {
+      const updatedBlock = await onAiEditBlock(blocks[idx], instruction);
+      if (updatedBlock) {
+        const nextBlocks = [...blocks];
+        nextBlocks[idx] = updatedBlock.trim();
+        onSaveFullMarkdown(nextBlocks.join('\n\n'), `تم تحديث القسم (${idx + 1}) بالذكاء الاصطناعي!`);
+        setAiPromptIdx(null);
+        setAiBlockInstruction('');
+      }
+    } finally {
+      setLoadingBlockIdx(null);
+    }
+  };
+
+  if (!window.__CHERIF_CAN_EDIT_COURSE__) {
+    return (
+      <div className="space-y-4">
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+          {rawMarkdown}
+        </ReactMarkdown>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {blocks.map((blockMd, bIdx) => {
+        const isManualEditing = editingIdx === bIdx;
+        const isAiEditing = aiPromptIdx === bIdx;
+        const isThisBlockLoading = loadingBlockIdx === bIdx;
+        const firstLine = (blockMd.split('\n')[0] || '').replace(/^#+\s*/, '').slice(0, 55);
+
+        return (
+          <div
+            key={bIdx}
+            className="relative group/block rounded-2xl border border-slate-800/70 hover:border-emerald-500/40 bg-[#040914]/60 p-4 md:p-6 transition-all"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-3 mb-3 border-b border-slate-800/80">
+              <span className="text-[11px] font-bold text-slate-400 truncate max-w-[260px]">
+                📌 قسم {bIdx + 1}: {firstLine}
+              </span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isManualEditing) {
+                      setEditingIdx(null);
+                    } else {
+                      setEditingIdx(bIdx);
+                      setManualText(blockMd);
+                      setAiPromptIdx(null);
+                    }
+                  }}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all ${
+                    isManualEditing ? 'bg-amber-500 text-slate-950 border-amber-400' : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-700'
+                  }`}
+                >
+                  ✏️ {isManualEditing ? 'إلغاء اليدوي' : 'تعديل يدوي'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAiPromptIdx(isAiEditing ? null : bIdx);
+                    setEditingIdx(null);
+                  }}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all ${
+                    isAiEditing ? 'bg-indigo-600 text-white border-indigo-400' : 'bg-indigo-500/15 hover:bg-indigo-600 text-indigo-300 hover:text-white border-indigo-500/30'
+                  }`}
+                >
+                  🤖 تعديل بالـ AI
+                </button>
+                <button
+                  type="button"
+                  disabled={isThisBlockLoading || isOperating}
+                  onClick={() => handleRunAiOnBlock(bIdx, 'أضف في نهاية هذا القسم تمرين (املأ الفراغ التفاعلي) من 3 جمل يختبر ما ورد في هذا القسم بصيغة [[الإجابة_الصحيحة | خيار_خاطئ_1 | خيار_خاطئ_2]].')}
+                  className="bg-emerald-500/15 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/30 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all"
+                  title="إضافة تمرين املأ الفراغ التفاعلي داخل هذا القسم مباشرة"
+                >
+                  🧩 + املأ الفراغ هنا
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteBlock(bIdx)}
+                  className="bg-rose-500/15 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/30 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all"
+                  title="حذف هذا القسم من الدرس"
+                >
+                  🗑️ حذف
+                </button>
+              </div>
+            </div>
+
+            {isAiEditing && (
+              <div className="mb-4 p-3.5 rounded-xl bg-indigo-950/35 border border-indigo-500/40 space-y-2.5 animate-fade-in">
+                <label className="text-xs font-bold text-indigo-300 block">
+                  🤖 ماذا تريد من الذكاء الاصطناعي أن يعدل أو يضيف في هذا القسم تحديداً؟
+                </label>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="text"
+                    value={aiBlockInstruction}
+                    onChange={(e) => setAiBlockInstruction(e.target.value)}
+                    placeholder="مثال: بسط هذه القاعدة أكثر، أو أضف 3 أمثلة جديدة..."
+                    className="flex-1 bg-slate-950 border border-slate-700 focus:border-indigo-400 rounded-xl px-3.5 py-2 text-xs text-white outline-none"
+                  />
+                  <button
+                    type="button"
+                    disabled={isThisBlockLoading || !aiBlockInstruction.trim()}
+                    onClick={() => handleRunAiOnBlock(bIdx)}
+                    className="bg-indigo-500 hover:bg-indigo-400 text-white font-black text-xs px-4 py-2 rounded-xl transition-all disabled:opacity-50"
+                  >
+                    {isThisBlockLoading ? '⏳ جاري تحديث القسم...' : '⚡ نفّذ على هذا القسم'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {isManualEditing ? (
+              <div className="space-y-3">
+                <textarea
+                  value={manualText}
+                  onChange={(e) => setManualText(e.target.value)}
+                  rows={10}
+                  dir="auto"
+                  className="w-full bg-slate-950 border-2 border-amber-500/50 rounded-xl p-4 text-sm text-slate-100 font-mono leading-relaxed outline-none"
+                />
+                <div className="flex items-center gap-2 justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setEditingIdx(null)}
+                    className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold px-4 py-2 rounded-xl"
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSaveManualBlock(bIdx)}
+                    className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs px-5 py-2 rounded-xl shadow"
+                  >
+                    💾 حفظ التعديل اليدوي
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className={isThisBlockLoading ? 'opacity-40 pointer-events-none animate-pulse' : ''}>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                  {blockMd}
+                </ReactMarkdown>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+// ============================================================================
+// 🏛️ المكوّن الرئيسي: Classroom
+// ============================================================================
 const Classroom = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -295,27 +885,21 @@ const Classroom = () => {
   const [certificateCoursesList, setCertificateCoursesList] = useState([]);
   const [activeCertCourseIdx, setActiveCertCourseIdx] = useState(0);
 
-  // =========================================
   // 🎮 نظام الحالات الموحد (Quest & Boss States)
-  // =========================================
   const [selectedQuestAnswer, setSelectedQuestAnswer] = useState(null); 
   const [selectedBossAnswers, setSelectedBossAnswers] = useState({});   
   const [questStatus, setQuestStatus] = useState('idle'); 
   const [scoreInfo, setScoreInfo] = useState({ score: 0, percentage: 0 }); 
   const [isQuizSubmitted, setIsQuizSubmitted] = useState(false);
 
-  // =========================================
   // 💻 نظام خانة كتابة الكود / تركيب الجمل التفاعلية والتلميحات
-  // =========================================
   const [studentCode, setStudentCode] = useState('');
   const [revealedHintsCount, setRevealedHintsCount] = useState(0);
   const [showSolution, setShowSolution] = useState(false);
   const [verifyingCode, setVerifyingCode] = useState(false);
   const [codeFeedback, setCodeFeedback] = useState(null);
 
-  // =========================================
   // 🔊 نظام الصوتيات، البطاقات التفاعلية، ولعبة المكعبات
-  // =========================================
   const [speakingKey, setSpeakingKey] = useState('');
   const [listeningRowIdx, setListeningRowIdx] = useState(null);
   const [speechCheckResult, setSpeechCheckResult] = useState(null);
@@ -330,11 +914,9 @@ const Classroom = () => {
   const [selectedTokens, setSelectedTokens] = useState([]);
   const [builderSuccess, setBuilderSuccess] = useState(null);
 
-  // =========================================
   // 🎙️🔥 نظام "Speak Class" الثلاثي المطور
-  // =========================================
   const [isVoiceSessionActive, setIsVoiceSessionActive] = useState(false);
-  const [speakClassMode, setSpeakClassMode] = useState('speak_class'); // 'speak_class' | 'roleplay' | 'mission'
+  const [speakClassMode, setSpeakClassMode] = useState('speak_class');
   const [voiceChatMessages, setVoiceChatMessages] = useState([]);
   const [isCoachThinking, setIsCoachThinking] = useState(false);
   const [isMicRecordingCoach, setIsMicRecordingCoach] = useState(false);
@@ -361,9 +943,94 @@ const Classroom = () => {
   const [loading, setLoading] = useState(true);
   const [claimingCert, setClaimingCert] = useState(false);
 
+  // 🩺 نظام المُشرط الذكي ومجلس الحكماء الثلاثي (Lesson + Unit + Course Surgeons)
+  const [isSurgeonOpen, setIsSurgeonOpen] = useState(false);
+  const [surgeonCritique, setSurgeonCritique] = useState(null);
+  const [activePersonaTab, setActivePersonaTab] = useState('all');
+  const [isAnalyzingLesson, setIsAnalyzingLesson] = useState(false);
+  const [isOperatingLesson, setIsOperatingLesson] = useState(false);
+  const [customSurgeonCommand, setCustomSurgeonCommand] = useState('');
+  const [surgeonStatusMsg, setSurgeonStatusMsg] = useState('');
+  const [lessonUndoStack, setLessonUndoStack] = useState([]);
+
+  const [isSyncingCourse, setIsSyncingCourse] = useState(false);
+
+  // ☁️ دالة المزامنة الشاملة لإرسال كل التعديلات والحذف والدروس الجديدة لقاعدة البيانات
+  const handleSyncFullCourseToDB = async () => {
+    if (!window.confirm('هل تريد فعلاً حفظ جميع التعديلات، وإضافات الذكاء الاصطناعي، وعمليات الحذف في قاعدة البيانات الأساسية لكي يراها الطلاب؟')) return;
+    
+    setIsSyncingCourse(true);
+    setSurgeonStatusMsg('🔄 جاري مزامنة الكورس بالكامل مع قاعدة البيانات הסحابية (MongoDB)...');
+    
+    try {
+      const res = await axios.post('http://localhost:5000/api/academy2/surgeon/sync-full-course', {
+        courseId: id,
+        lessonsList: lessons
+      });
+
+      if (res.data?.success) {
+        setSurgeonStatusMsg('✅ تم حفظ الكورس بجميع وحداته ودروسه وتعديلاته في قاعدة البيانات بنجاح!');
+        alert('🎉 نجاح السيطرة: تم رفع الكورس بشكله النهائي لقاعدة البيانات!');
+      }
+    } catch (e) {
+      console.error(e);
+      alert('❌ حدث خطأ أثناء المزامنة مع قاعدة البيانات.');
+      setSurgeonStatusMsg('');
+    } finally {
+      setIsSyncingCourse(false);
+    }
+  };
+
+
+  // 🏗️ حالات جراح الوحدات (Unit Surgeon) وجراح الكورس الشامل (Course Surgeon)
+  const [activeUnitSurgeon, setActiveUnitSurgeon] = useState(null);
+  const [unitSurgeonCommand, setUnitSurgeonCommand] = useState('');
+  const [newLessonTitleInUnit, setNewLessonTitleInUnit] = useState('');
+  const [editingUnitNameValue, setEditingUnitNameValue] = useState('');
+  const [isCourseSurgeonOpen, setIsCourseSurgeonOpen] = useState(false);
+  const [courseSurgeonCommand, setCourseSurgeonCommand] = useState('');
+  const [newUnitNameInput, setNewUnitNameInput] = useState('');
+
   const shuffleBossQuestions = (quizArray) => {
     return [...quizArray].sort(() => Math.random() - 0.5);
   };
+
+  // 🔐 فك تشفير توكن المستخدم لمعرفة هويته وصلاحيته (Admin / Instructor / Student)
+  const currentUser = useMemo(() => {
+    try {
+      const token = localStorage.getItem('cherif_token');
+      if (!token) return null;
+      const base64Url = token.split('.')[1];
+      if (!base64Url) return null;
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join('')
+      );
+      return JSON.parse(jsonPayload);
+    } catch (e) {
+      return null;
+    }
+  }, []);
+
+  // 🛡️ هل المستخدم الحالي هو الأدمين أو الأستاذ مالك الكورس؟
+  const isCourseOwnerOrAdmin = useMemo(() => {
+    if (!currentUser) return false;
+    if (currentUser.role === 'admin') return true;
+    if (currentUser.role === 'instructor') {
+      const courseOwnerId = course?.instructor?._id || course?.instructor;
+      if (!courseOwnerId || course?._id === 'local_course_id') return true;
+      return String(courseOwnerId) === String(currentUser.id);
+    }
+    return false;
+  }, [currentUser, course]);
+
+  // 👁️ زر اختياري للأدمين لمعاينة الصفحة كما يراها التلميذ تماماً
+  const [studentPreviewMode, setStudentPreviewMode] = useState(false);
+  const canEditCourse = isCourseOwnerOrAdmin && !studentPreviewMode;
+  window.__CHERIF_CAN_EDIT_COURSE__ = canEditCourse;
 
   // معلومات اللغة الحالية للكورس والدرس
   const activeLangConfig = useMemo(() => {
@@ -371,6 +1038,464 @@ const Classroom = () => {
     return resolveLanguageConfig(fullContext, activeLesson?.codeSnippet || '');
   }, [course, activeLesson]);
 
+  // 🔄 بناء كائن JSON كامل للكورس أو الشهادة في أي وقت
+  const buildLiveCourseJSONSnapshot = (updatedLessonsList = lessons) => {
+    const cachedRaw = localStorage.getItem('cherif_active_local_course_json');
+    if (cachedRaw) {
+      try {
+        const parsed = JSON.parse(cachedRaw);
+        const buildSectionsFromFlat = () => {
+          const map = {};
+          updatedLessonsList.forEach(les => {
+            const sName = les.section || 'الوحدة 1';
+            if (!map[sName]) {
+              map[sName] = {
+                sectionOrder: les.sectionOrder || Object.keys(map).length + 1,
+                sectionName: sName,
+                unitDeepSummary: unitSummariesMap[sName] || null,
+                lessons: []
+              };
+            }
+            map[sName].lessons.push(les);
+          });
+          return Object.values(map);
+        };
+
+        if (Array.isArray(parsed.courses) && parsed.courses[activeCertCourseIdx]) {
+          parsed.courses[activeCertCourseIdx].sections = buildSectionsFromFlat();
+        } else {
+          parsed.sections = buildSectionsFromFlat();
+        }
+        return parsed;
+      } catch (e) {}
+    }
+
+    const sectionsMap = {};
+    updatedLessonsList.forEach(les => {
+      const secName = les.section || 'الوحدة 1';
+      if (!sectionsMap[secName]) {
+        sectionsMap[secName] = {
+          sectionOrder: les.sectionOrder || Object.keys(sectionsMap).length + 1,
+          sectionName: secName,
+          unitDeepSummary: unitSummariesMap[secName] || null,
+          lessons: []
+        };
+      }
+      sectionsMap[secName].lessons.push(les);
+    });
+
+    return {
+      _id: course?._id || id,
+      courseTitle: course?.title || 'كورس معدل',
+      courseDescription: course?.description || '',
+      targetLanguage: course?.targetLanguage || activeLangConfig.nameAr,
+      speechLang: activeLangConfig.code,
+      unitSummariesMap,
+      sections: Object.values(sectionsMap)
+    };
+  };
+
+  // 💾 دالة محصنة لحفظ مصفوفة الدروس المحدثة مع ضمان عدم تكرار أي مفتاح (_id) في React
+  const commitLessonsListUpdate = (nextLessons, statusMessage = '') => {
+    const seenIds = new Set();
+    const reordered = nextLessons.map((les, idx) => {
+      let safeId = les._id || `lesson_uid_${Date.now()}_${idx}`;
+      if (seenIds.has(safeId)) {
+        safeId = `${safeId}_dup_${idx}_${Math.random().toString(36).slice(2, 6)}`;
+      }
+      seenIds.add(safeId);
+      return { ...les, _id: safeId, order: idx + 1 };
+    });
+
+    setLessons(reordered);
+    if (activeLesson) {
+      const stillExists = reordered.find(l => l._id === activeLesson._id || l.title === activeLesson.title);
+      setActiveLesson(stillExists || reordered[0] || null);
+    } else if (reordered.length > 0) {
+      setActiveLesson(reordered[0]);
+    }
+    try {
+      const fullSnapshot = buildLiveCourseJSONSnapshot(reordered);
+      localStorage.setItem('cherif_active_local_course_json', JSON.stringify(fullSnapshot));
+    } catch (e) {}
+    if (statusMessage) setSurgeonStatusMsg(`✅ ${statusMessage}`);
+  };
+
+
+  // 💾 حفظ تعديل الدرس الواحد في React State + LocalStorage + MongoDB!
+  const applyUpdatedLessonToState = async (updatedLessonObj, reportText = '') => {
+    if (!updatedLessonObj || !activeLesson) return;
+
+    setLessonUndoStack(prev => [...prev, activeLesson]);
+
+    const mergedLesson = {
+      ...activeLesson,
+      ...updatedLessonObj,
+      _id: activeLesson._id,
+      order: activeLesson.order,
+      section: activeLesson.section,
+      sectionOrder: activeLesson.sectionOrder
+    };
+
+    const nextLessons = lessons.map(l => (l._id === activeLesson._id ? mergedLesson : l));
+    setActiveLesson(mergedLesson);
+    setLessons(nextLessons);
+
+    try {
+      localStorage.setItem(`cherif_saved_lesson_${id}_${activeLesson._id}`, JSON.stringify(mergedLesson));
+      const fullSnapshot = buildLiveCourseJSONSnapshot(nextLessons);
+      localStorage.setItem('cherif_active_local_course_json', JSON.stringify(fullSnapshot));
+    } catch (e) {}
+
+    try {
+      const token = localStorage.getItem('cherif_token');
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      await axios.put(`http://127.0.0.1:5001/api/lessons/${activeLesson._id}`, mergedLesson, { headers });
+    } catch (e) {}
+
+    try {
+      await axios.post('http://localhost:5000/api/academy2/surgeon/save-lesson-db', {
+        lessonId: activeLesson._id,
+        courseId: id,
+        updatedLesson: mergedLesson
+      });
+    } catch (e) {}
+
+    if (reportText) {
+      setSurgeonStatusMsg(`✅ ${reportText} (تم الحفظ تلقائياً 💾)`);
+    }
+  };
+
+  // ============================================================================
+  // 🏗️ دوال جراح الوحدة (Unit-Level Surgeon) وجراح الكورس (Course-Level Surgeon)
+  // ============================================================================
+
+  // 1. إعادة تسمية الوحدة يدوياً
+  const handleRenameUnit = (oldSectionName, newSectionName) => {
+    const trimmed = (newSectionName || '').trim();
+    if (!trimmed || trimmed === oldSectionName) return;
+    const nextLessons = lessons.map(l => (l.section === oldSectionName ? { ...l, section: trimmed } : l));
+    if (unitSummariesMap[oldSectionName]) {
+      setUnitSummariesMap(prev => {
+        const copy = { ...prev, [trimmed]: prev[oldSectionName] };
+        delete copy[oldSectionName];
+        return copy;
+      });
+    }
+    setOpenSections(prev => ({ ...prev, [trimmed]: true }));
+    setActiveUnitSurgeon(null);
+    commitLessonsListUpdate(nextLessons, `تم تغيير اسم الوحدة إلى (${trimmed}) وحفظها!`);
+  };
+
+  // 2. إضافة درس جديد داخل وحدة محددة
+  const handleAddLessonToUnit = async (sectionName, customTitle = '') => {
+    const titleToUse = (customTitle || newLessonTitleInUnit || '').trim() || `درس تطبيقي جديد في ${sectionName}`;
+    const newLessonObj = {
+      _id: `lesson_custom_${Date.now()}`,
+      title: titleToUse,
+      description: `درس مضاف عبر جراح الوحدة (${sectionName})`,
+      type: 'video',
+      lessonCategory: 'language_mastery',
+      section: sectionName,
+      content: `### 🎯 1. هدف الدرس السريع\nمرحباً بك في درس **${titleToUse}** ضمن (${sectionName}). يمكنك تعديل هذا القسم يدوياً أو بالذكاء الاصطناعي فوراً!\n\n### 🧩 2. تمرين املأ الفراغ التفاعلي\n- اختر الكلمة الصحيحة لإتمام الجملة: [[الصواب | خيار 1 | خيار 2]]`,
+      codeSnippet: '',
+      codeExplanation: '',
+      codingPractice: {
+        hasPractice: true,
+        taskQuestion: `اكتب جملة تطبيقية حول موضوع (${titleToUse}):`,
+        starterCode: '',
+        hints: ['تذكر القاعدة الأساسية للوحدة.', 'ابدأ بفاعل ثم فعل واضح.'],
+        solutionCode: 'Good job!'
+      },
+      dailyQuest: {
+        question: `ما هي الفكرة الرئيسية في درس (${titleToUse})؟`,
+        options: ['التطبيق العملي للقاعدة', 'تجاهل القاعدة', 'حفظ عشوائي', 'لا شيء مما سبق'],
+        correctAnswerIndex: 0,
+        explanation: 'التطبيق العملي المنهجي هو أساس إتقان المهارة.',
+        bonusExp: 50
+      },
+      bossQuiz: []
+    };
+
+    // إدراج الدرس في نهاية هذه الوحدة تحديداً
+    const unitLessonIndices = lessons.map((l, i) => (l.section === sectionName ? i : -1)).filter(i => i !== -1);
+    const insertAt = unitLessonIndices.length > 0 ? unitLessonIndices[unitLessonIndices.length - 1] + 1 : lessons.length;
+    const nextLessons = [...lessons.slice(0, insertAt), newLessonObj, ...lessons.slice(insertAt)];
+
+    setNewLessonTitleInUnit('');
+    setActiveUnitSurgeon(null);
+    commitLessonsListUpdate(nextLessons, `تمت إضافة الدرس (${titleToUse}) إلى (${sectionName})!`);
+    setActiveLesson(newLessonObj);
+  };
+
+  // 3. حذف وحدة كاملة
+  const handleDeleteUnit = (sectionName) => {
+    if (!window.confirm(`هل أنت متأكد من حذف الوحدة (${sectionName}) بجميع دروسها؟`)) return;
+    const nextLessons = lessons.filter(l => l.section !== sectionName);
+    setActiveUnitSurgeon(null);
+    commitLessonsListUpdate(nextLessons, `تم حذف الوحدة (${sectionName}) بنجاح!`);
+  };
+
+  // 4. جراحة الوحدة بالذكاء الاصطناعي (Unit AI Surgeon)
+  const handleExecuteUnitSurgeon = async (sectionName, sectionLessons, customCmd = null) => {
+    const cmd = (customCmd || unitSurgeonCommand || '').trim();
+    if (!cmd) return;
+    setIsOperatingLesson(true);
+    setSurgeonStatusMsg(`🏗️ جاري تنفيذ الجراحة الذكية على الوحدة (${sectionName})...`);
+    try {
+      const res = await axios.post('http://localhost:5000/api/academy2/surgeon/operate-unit', {
+        courseTitle: `${course?.parentCertTitle || ''} ${course?.title || ''}`.trim(),
+        sectionName,
+        currentLessons: sectionLessons,
+        userCommand: cmd
+      });
+
+      if (res.data?.success && Array.isArray(res.data.data?.updatedLessonsBlueprint)) {
+        const blueprint = res.data.data.updatedLessonsBlueprint;
+        const rebuiltUnitLessons = blueprint.map((item, idx) => {
+          const existing = sectionLessons.find(
+            old => old.title.trim().toLowerCase() === (item.title || '').trim().toLowerCase()
+          ) || sectionLessons[idx];
+
+          if (existing && item.title === existing.title) {
+            return { ...existing, description: item.description || existing.description };
+          }
+          return {
+            ...(existing || {}),
+            _id: existing?._id || `lesson_unit_ai_${Date.now()}_${idx}`,
+            title: item.title || `درس ${idx + 1}`,
+            description: item.description || '',
+            type: item.type || existing?.type || 'video',
+            section: sectionName,
+            content: existing?.content || `### 🎯 1. مقدمة الدرس: ${item.title}\n${item.description || 'درس جديد تمت إضافته عبر جراح الوحدة الذكي.'}`
+          };
+        });
+
+        // استبدال دروس هذه الوحدة بالدروس المهيكلة الجديدة مع الحفاظ على باقي الوحدات
+        const finalLessons = [];
+        let unitInserted = false;
+        lessons.forEach(l => {
+          if (l.section === sectionName) {
+            if (!unitInserted) {
+              finalLessons.push(...rebuiltUnitLessons);
+              unitInserted = true;
+            }
+          } else {
+            finalLessons.push(l);
+          }
+        });
+        if (!unitInserted) finalLessons.push(...rebuiltUnitLessons);
+
+        commitLessonsListUpdate(finalLessons, res.data.data.surgeonReport || `تم تحديث هيكل الوحدة (${sectionName}) بالذكاء الاصطناعي!`);
+        setUnitSurgeonCommand('');
+        setActiveUnitSurgeon(null);
+      }
+    } catch (e) {
+      alert('تعذر الاتصال بمسار جراحة الوحدة في السيرفر، تأكد من إضافة مسار /operate-unit.');
+    } finally {
+      setIsOperatingLesson(false);
+    }
+  };
+
+  // 5. إضافة وحدة جديدة بالكامل للكورس (Manual Course Unit Addition)
+  const handleAddNewUnitToCourse = () => {
+    const unitTitle = (newUnitNameInput || '').trim();
+    if (!unitTitle) return alert('اكتب اسم الوحدة الجديدة أولاً!');
+    const starterLesson = {
+      _id: `lesson_new_unit_${Date.now()}`,
+      title: `الدرس 1: مدخل إلى ${unitTitle}`,
+      description: `الدرس الافتتاحي في ${unitTitle}`,
+      type: 'video',
+      lessonCategory: 'language_mastery',
+      section: unitTitle,
+      content: `### 🎯 1. مرحباً بك في ${unitTitle}\nتم إنشاء هذه الوحدة الجديدة بنجاح! يمكنك الآن استخدام **المُشرط الذكي** لتوليد أو تعديل محتوى هذا الدرس.`,
+      codeSnippet: '',
+      codeExplanation: ''
+    };
+    const nextLessons = [...lessons, starterLesson];
+    setNewUnitNameInput('');
+    setOpenSections(prev => ({ ...prev, [unitTitle]: true }));
+    commitLessonsListUpdate(nextLessons, `تم إنشاء الوحدة الجديدة (${unitTitle}) وإضافتها للكورس!`);
+    setActiveLesson(starterLesson);
+  };
+
+  // 6. جراحة الكراش كورس بالكامل بالذكاء الاصطناعي (Course-Level AI Surgeon)
+  const handleExecuteCourseSurgeon = async (customCmd = null) => {
+    const cmd = (customCmd || courseSurgeonCommand || '').trim();
+    if (!cmd) return;
+    setIsOperatingLesson(true);
+    setSurgeonStatusMsg('🌍 جاري إعادة هيكلة الكراش كورس بالكامل عبر الذكاء الاصطناعي...');
+    try {
+      const currentBlueprint = Object.values(
+        lessons.reduce((acc, l) => {
+          const sName = l.section || 'الوحدة 1';
+          if (!acc[sName]) acc[sName] = { sectionName: sName, lessons: [] };
+          acc[sName].lessons.push({ title: l.title, type: l.type, description: l.description });
+          return acc;
+        }, {})
+      );
+
+      const res = await axios.post('http://localhost:5000/api/academy2/surgeon/operate-course-blueprint', {
+        courseTitle: `${course?.parentCertTitle || ''} ${course?.title || ''}`.trim(),
+        currentBlueprint,
+        userCommand: cmd
+      });
+
+      if (res.data?.success && Array.isArray(res.data.data?.updatedBlueprint)) {
+        const nextFlatLessons = [];
+        res.data.data.updatedBlueprint.forEach((sec, sIdx) => {
+          const secName = sec.sectionName || `الوحدة ${sIdx + 1}`;
+          (sec.lessons || []).forEach((lesItem, lIdx) => {
+            const matchedOld = lessons.find(
+              old => old.title.trim().toLowerCase() === (lesItem.title || '').trim().toLowerCase()
+            );
+            if (matchedOld) {
+              nextFlatLessons.push({
+                ...matchedOld,
+                section: secName,
+                sectionOrder: sIdx + 1
+              });
+            } else {
+              nextFlatLessons.push({
+                _id: `lesson_course_ai_${Date.now()}_${sIdx}_${lIdx}`,
+                title: lesItem.title || `الدرس ${lIdx + 1}`,
+                description: lesItem.description || `درس جديد ضمن ${secName}`,
+                type: lesItem.type || 'video',
+                lessonCategory: 'language_mastery',
+                section: secName,
+                sectionOrder: sIdx + 1,
+                content: `### 🎯 1. ${lesItem.title}\nدرس جديد تمت إضافته عبر **جراح الكورس الشامل** ضمن (${secName}). افتح المُشرط الذكي لإثرائه الآن!`
+              });
+            }
+          });
+        });
+
+        if (nextFlatLessons.length > 0) {
+          commitLessonsListUpdate(nextFlatLessons, res.data.data.surgeonReport || 'تم تحديث هيكل الكراش كورس بالكامل!');
+        }
+        setCourseSurgeonCommand('');
+        setIsCourseSurgeonOpen(false);
+      }
+    } catch (e) {
+      alert('تعذر الاتصال بمسار جراحة الكورس الشامل، تأكد من إضافة مسار /operate-course-blueprint.');
+    } finally {
+      setIsOperatingLesson(false);
+    }
+  };
+
+  // 🤖 دالة تعديل قسم واحد فقط بالذكاء الاصطناعي
+  const handleAiEditSingleSection = async (sectionMarkdown, userInstruction) => {
+    try {
+      const res = await axios.post('http://localhost:5000/api/academy2/surgeon/operate-section', {
+        courseTitle: `${course?.parentCertTitle || ''} ${course?.title || ''}`.trim(),
+        courseOrder: course?.courseOrder || (activeCertCourseIdx + 1) || 1,
+        lessonTitle: activeLesson?.title || '',
+        sectionMarkdown,
+        userInstruction,
+        targetLanguage: course?.targetLanguage || activeLangConfig.nameAr
+      });
+      if (res.data?.success && res.data.updatedSectionMarkdown) {
+        return res.data.updatedSectionMarkdown;
+      }
+    } catch (e) {
+      alert('تعذر تعديل هذا القسم بالذكاء الاصطناعي حالياً.');
+    }
+    return null;
+  };
+
+  // 📥 تصدير وتحميل ملف الـ JSON المحدث في أي وقت
+  const handleExportUpdatedJSON = () => {
+    const fullSnapshot = buildLiveCourseJSONSnapshot(lessons);
+    const jsonString = JSON.stringify(fullSnapshot, null, 2);
+    localStorage.setItem('cherif_active_local_course_json', jsonString);
+
+    const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const safeName = (course?.title || 'Master_Course').replace(/[^\u0600-\u06FFa-zA-Z0-9_-]/g, '_').slice(0, 45);
+    a.download = `Updated_${safeName}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setSurgeonStatusMsg('📥 تم حفظ وتصدير ملف الـ JSON المحدث بنجاح!');
+  };
+
+  const handleAnalyzeCurrentLesson = async () => {
+    if (!activeLesson) return;
+    setIsAnalyzingLesson(true);
+    setSurgeonStatusMsg('');
+    try {
+      const res = await axios.post('http://localhost:5000/api/academy2/surgeon/critique-and-suggest', {
+        courseTitle: `${course?.parentCertTitle || ''} ${course?.title || ''}`.trim(),
+        courseDescription: course?.description || '',
+        courseOrder: course?.courseOrder || (activeCertCourseIdx + 1) || 1,
+        sectionName: activeLesson.section || '',
+        lesson: activeLesson,
+        targetLanguage: course?.targetLanguage || activeLangConfig.nameAr
+      });
+      if (res.data?.success) {
+        setSurgeonCritique(res.data.data);
+      }
+    } catch (e) {
+      setSurgeonStatusMsg('⚠️ تعذر جلب الاقتراحات التلقائية، يمكنك كتابة أمرك مباشرة بالأسفل.');
+    } finally {
+      setIsAnalyzingLesson(false);
+    }
+  };
+
+  const handleExecuteSurgeonCommand = async (commandText, opType = 'custom') => {
+    if (!commandText || !commandText.trim() || !activeLesson) return;
+    setIsOperatingLesson(true);
+    setSurgeonStatusMsg('🩺 جاري تنفيذ التعديل الجراحي وحقن العناصر في الدرس...');
+
+    try {
+      const res = await axios.post('http://localhost:5000/api/academy2/surgeon/operate-lesson', {
+        courseTitle: `${course?.parentCertTitle || ''} ${course?.title || ''}`.trim(),
+        courseDescription: course?.description || '',
+        courseOrder: course?.courseOrder || (activeCertCourseIdx + 1) || 1,
+        sectionName: activeLesson.section || '',
+        lesson: activeLesson,
+        userCommand: commandText,
+        operationType: opType,
+        targetLanguage: course?.targetLanguage || activeLangConfig.nameAr
+      });
+
+      if (res.data?.success && res.data.updatedLesson) {
+        await applyUpdatedLessonToState(res.data.updatedLesson, res.data.surgeonReport);
+        setCustomSurgeonCommand('');
+      }
+    } catch (e) {
+      setSurgeonStatusMsg('❌ حدث خطأ أثناء تعديل الدرس. حاول مرة أخرى.');
+    } finally {
+      setIsOperatingLesson(false);
+    }
+  };
+
+  const handleUndoLastSurgeonEdit = async () => {
+    if (lessonUndoStack.length === 0) return;
+    const previousVersion = lessonUndoStack[lessonUndoStack.length - 1];
+    setLessonUndoStack(prev => prev.slice(0, -1));
+    const nextLessons = lessons.map(l => (l._id === previousVersion._id ? previousVersion : l));
+    setActiveLesson(previousVersion);
+    setLessons(nextLessons);
+
+    try {
+      localStorage.setItem(`cherif_saved_lesson_${id}_${previousVersion._id}`, JSON.stringify(previousVersion));
+      const fullSnapshot = buildLiveCourseJSONSnapshot(nextLessons);
+      localStorage.setItem('cherif_active_local_course_json', JSON.stringify(fullSnapshot));
+      await axios.post('http://localhost:5000/api/academy2/surgeon/save-lesson-db', {
+        lessonId: previousVersion._id,
+        courseId: id,
+        updatedLesson: previousVersion
+      });
+    } catch (e) {}
+
+    setSurgeonStatusMsg('↩️ تم التراجع واستعادة النسخة السابقة من الدرس وحفظها بنجاح.');
+  };
+
+  // ============================================================================
+  // 🔄 دوال استرجاع وبناء الكورس وملفات JSON
+  // ============================================================================
   const hydrateSingleCourseObject = (courseJson, parentCertTitle = '', parentTargetLang = '', parentSpeechLang = '') => {
     if (!courseJson) return false;
     const cleanedTitle = cleanCourseTitleText(courseJson.courseTitle || courseJson.title || 'كراش كورس تفاعلي');
@@ -402,13 +1527,19 @@ const Classroom = () => {
         summaries[secName] = sec.unitDeepSummary;
       }
       (sec.lessons || []).forEach((les, lIdx) => {
-        flatLessons.push({
+        const lessonId = les._id || `lesson_${sIdx + 1}_${lIdx + 1}`;
+        let lessonObj = {
           ...les,
-          _id: les._id || `lesson_${sIdx + 1}_${lIdx + 1}`,
+          _id: lessonId,
           order: les.order || globalOrder++,
           sectionOrder: sec.sectionOrder || (sIdx + 1),
           section: secName
-        });
+        };
+        const savedOverride = localStorage.getItem(`cherif_saved_lesson_${id}_${lessonId}`);
+        if (savedOverride) {
+          try { lessonObj = { ...lessonObj, ...JSON.parse(savedOverride) }; } catch (e) {}
+        }
+        flatLessons.push(lessonObj);
       });
     });
 
@@ -473,7 +1604,7 @@ const Classroom = () => {
   };
 
   // ============================================================================
-  // 🔊 محرك اختيار الصوت الطبيعي والنطق لجميع اللغات (fr-FR, ja-JP, de-DE, es-ES, zh-CN, en-US)
+  // 🔊 نظام الصوتيات واستوديو الاستماع (Web Speech + AI Neural TTS)
   // ============================================================================
   const getBestNaturalVoiceForLang = (langCode = 'en-US') => {
     if (!('speechSynthesis' in window)) return null;
@@ -494,8 +1625,7 @@ const Classroom = () => {
     return matchingVoices[0];
   };
 
-
-const neuralAudioCacheRef = useRef({});
+  const neuralAudioCacheRef = useRef({});
   const activeHtmlAudioRef = useRef(null);
 
   const handleStopAudio = () => {
@@ -515,8 +1645,16 @@ const neuralAudioCacheRef = useRef({});
 
     const cleanForeign = sanitizeLessonMarkdown(rawText || '')
       .split('\n')
-      .map(l => l.replace(/🔊.*$/g, '').replace(/\|.*$/g, '').replace(/^\d+[.) -]+/, '').replace(/\([^)]*[\u0600-\u06FF]+[^)]*\)/g, '').trim())
-      .filter(l => l && !l.startsWith('🎧') && !/^[\u0600-\u06FF\s\d.,:!؟-]+$/.test(l))
+      .map(l => l
+        .replace(/🔊.*$/g, '')
+        .replace(/\|.*$/g, '')
+        .replace(/^✅.*$/g, '')
+        .replace(/^\d+[.) -]+/, '')
+        .replace(/\([^)]*[\u0600-\u06FF]+[^)]*\)/g, '')
+        .replace(/[\u0600-\u06FF]+/g, '')
+        .trim()
+      )
+      .filter(l => l && !l.startsWith('🎧') && /[A-Za-z\u00C0-\u024F\u3040-\u30ff\u4e00-\u9faf]/.test(l))
       .join('. ');
 
     const textToSpeak = cleanForeign || rawText;
@@ -531,47 +1669,42 @@ const neuralAudioCacheRef = useRef({});
     );
 
     const activeStateKey = `${keyId}_${rate}`;
-    const cacheKey = `${detectedLang.code}_${rate}_${textToSpeak}`;
+    const cacheKey = `${detectedLang.code}_${textToSpeak}`;
     setSpeakingKey(activeStateKey);
 
-    // 1. إذا كان المقطع الصوتي العصبي محفوظاً في الكاش، نشغله في 0 جزء من الثانية!
-    if (neuralAudioCacheRef.current[cacheKey]) {
-      const cachedAudio = new Audio(neuralAudioCacheRef.current[cacheKey]);
-      activeHtmlAudioRef.current = cachedAudio;
-      cachedAudio.onended = () => {
+    const playDataUrlWithRate = async (dataUrl) => {
+      const audio = new Audio(dataUrl);
+      audio.playbackRate = Number(rate) || 1.0;
+      activeHtmlAudioRef.current = audio;
+      audio.onended = () => {
         setSpeakingKey('');
         if (onEndCallback) onEndCallback();
       };
-      cachedAudio.onerror = () => setSpeakingKey('');
-      cachedAudio.play().catch(() => setSpeakingKey(''));
-      return;
+      audio.onerror = () => setSpeakingKey('');
+      await audio.play();
+    };
+
+    if (neuralAudioCacheRef.current[cacheKey]) {
+      try {
+        await playDataUrlWithRate(neuralAudioCacheRef.current[cacheKey]);
+        return;
+      } catch (e) {}
     }
 
-    // 2. طلب الصوت البشري العصبي (Edge-TTS Neural Voice) من السيرفر
     try {
       const res = await axios.post('http://localhost:5000/api/academy2/lang-cert/neural-tts', {
         text: textToSpeak,
         langCode: detectedLang.code,
-        rate
-      }, { timeout: 6500 });
+        rate: 1.0
+      }, { timeout: 7000 });
 
       if (res.data?.success && res.data.audioUrl) {
         neuralAudioCacheRef.current[cacheKey] = res.data.audioUrl;
-        const audio = new Audio(res.data.audioUrl);
-        activeHtmlAudioRef.current = audio;
-        audio.onended = () => {
-          setSpeakingKey('');
-          if (onEndCallback) onEndCallback();
-        };
-        audio.onerror = () => setSpeakingKey('');
-        await audio.play();
+        await playDataUrlWithRate(res.data.audioUrl);
         return;
       }
-    } catch (e) {
-      // الانتقال الصامت والآني لصوت المتصفح في حال عدم توفر السيرفر
-    }
+    } catch (e) {}
 
-    // 3. خطة الطوارئ الفورية (Web Speech API)
     if ('speechSynthesis' in window) {
       const utterance = new SpeechSynthesisUtterance(textToSpeak);
       const bestVoice = getBestNaturalVoiceForLang(detectedLang.code);
@@ -593,8 +1726,6 @@ const neuralAudioCacheRef = useRef({});
     }
   };
 
-
-
   const handleTestPronunciationMic = (targetSentence, rowIndex) => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -610,7 +1741,6 @@ const neuralAudioCacheRef = useRef({});
     };
     recognition.onresult = (event) => {
       const spoken = event.results[0][0].transcript || '';
-      // مقارنة ذكية تدعم الحروف اللاتينية المزخرفة (é, è, ç, ü, ñ) واللغات الشرقية (اليابانية والصينية)
       const normalizeUnicode = (str) => (str || '')
         .replace(/[^\p{L}\p{N}\s]/gu, '')
         .replace(/\s+/g, ' ')
@@ -638,6 +1768,9 @@ const neuralAudioCacheRef = useRef({});
     recognition.start();
   };
 
+  // ============================================================================
+  // 📡 جلب البيانات الأساسية من السيرفر (Fetch Data)
+  // ============================================================================
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -688,8 +1821,16 @@ const neuralAudioCacheRef = useRef({});
             setUnitSummariesMap(prev => ({ ...lessonSummaries, ...prev }));
           }
 
-          setLessons(fetchedLessons);
-          setActiveLesson(fetchedLessons[0]);
+          const restoredLessons = fetchedLessons.map(les => {
+            const savedOverride = localStorage.getItem(`cherif_saved_lesson_${id}_${les._id}`);
+            if (savedOverride) {
+              try { return { ...les, ...JSON.parse(savedOverride) }; } catch (e) {}
+            }
+            return les;
+          });
+
+          setLessons(restoredLessons);
+          setActiveLesson(restoredLessons[0]);
         } else if (courseRes.data?.course?.sections || courseRes.data?.course?.blueprint || courseRes.data?.course?.courses) {
           hydrateFromRawCourseJSON(courseRes.data.course, 0);
         }
@@ -708,13 +1849,49 @@ const neuralAudioCacheRef = useRef({});
     return () => handleStopAudio();
   }, [id]);
 
-  const audioStudioItems = useMemo(() => {
-    return parseAudioShadowingSnippet(activeLesson?.codeSnippet || '');
-  }, [activeLesson]);
+  // ============================================================================
+  // 🧠 معالجة الودجات الصوتية والبصرية للدرس
+  // ============================================================================
+  const audioStudioItems = useMemo(() => 
+    parseAudioShadowingSnippet(activeLesson?.codeSnippet || ''), [activeLesson]);
+
+  useEffect(() => {
+    if (!audioStudioItems || audioStudioItems.length === 0) return;
+
+    const preloadAudioInBg = async () => {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      for (const item of audioStudioItems) {
+        if (!item.sentence) continue;
+        const detectedLang = resolveLanguageConfig(
+          `${course?.targetLanguage || ''} ${course?.speechLang || ''} ${activeLesson?.section || ''}`,
+          item.sentence
+        );
+        const cacheKey = `${detectedLang.code}_${item.sentence}`;
+        if (!neuralAudioCacheRef.current[cacheKey]) {
+          try {
+            const res = await axios.post('http://localhost:5000/api/academy2/lang-cert/neural-tts', {
+              text: item.sentence,
+              langCode: detectedLang.code,
+              rate: 1.0
+            });
+            if (res.data?.success && res.data.audioUrl) {
+              neuralAudioCacheRef.current[cacheKey] = res.data.audioUrl;
+            }
+          } catch (e) {}
+        }
+      }
+    };
+    preloadAudioInBg();
+  }, [audioStudioItems, course, activeLesson]);
 
   const visualWidgets = useMemo(() => {
     return extractLanguageVisualWidgets(activeLesson?.content || '');
   }, [activeLesson]);
+
+  const effectiveMistakeRows = useMemo(() => {
+    if (Array.isArray(activeLesson?.customMistakeRows)) return activeLesson.customMistakeRows;
+    return visualWidgets.mistakeRows;
+  }, [activeLesson, visualWidgets]);
 
   const lessonTargetVocabulary = useMemo(() => {
     const fromAudio = audioStudioItems.map(i => i.sentence).filter(Boolean);
@@ -722,8 +1899,18 @@ const neuralAudioCacheRef = useRef({});
     return combined.slice(0, 6);
   }, [audioStudioItems, visualWidgets]);
 
+  const effectiveLegoEquations = useMemo(() => {
+    if (Array.isArray(activeLesson?.customLegoEquations)) return activeLesson.customLegoEquations;
+    return visualWidgets.legoEquations;
+  }, [activeLesson, visualWidgets]);
+
+  const effectiveLadderSteps = useMemo(() => {
+    if (Array.isArray(activeLesson?.customLadderSteps)) return activeLesson.customLadderSteps;
+    return visualWidgets.ladderSteps;
+  }, [activeLesson, visualWidgets]);
+
   // ============================================================================
-  // 🧠🎙️ المحرك الثلاثي الذكي (متعدد اللغات: يدعم الفرنسية، الإنجليزية، وجميع اللغات!)
+  // 🧠🎙️ المحرك الثلاثي الذكي وحصة المحادثة (Voice Coach)
   // ============================================================================
   const generateSmartContextualFallback = (spokenText, turnIdx, mode, currentTargetIdx = 0) => {
     const fullCtx = `${course?.parentCertTitle || ''} ${course?.title || ''} ${course?.difficulty || ''} ${activeLesson?.section || ''} ${activeLesson?.title || ''}`;
@@ -736,7 +1923,6 @@ const neuralAudioCacheRef = useRef({});
       : (isZeroLevel ? ['a cat', 'a mat', 'a red cup', 'in the sun'] : ['make a decision', 'take a break', 'heavy rain', 'have a great time']);
 
     const targets = lessonTargetVocabulary.length > 0 ? lessonTargetVocabulary : defaultFallbackVocab;
-
     const tCurrent = targets[currentTargetIdx % targets.length] || targets[0];
     const tNext = targets[(currentTargetIdx + 1) % targets.length] || targets[0];
     const tThird = targets[(currentTargetIdx + 2) % targets.length] || targets[0];
@@ -995,9 +2181,6 @@ const neuralAudioCacheRef = useRef({});
     };
   };
 
-  // ============================================================================
-  // 🚀 دالة إرسال كلام الطالب للمدرب الذكي (تمرر اللغة المستهدفة للسيرفر وتدعم كل اللغات!)
-  // ============================================================================
   const sendToInAppVoiceCoach = async (spokenText, overrideMode = null) => {
     const activeMode = overrideMode || speakClassMode;
     setIsCoachThinking(true);
@@ -1018,7 +2201,6 @@ const neuralAudioCacheRef = useRef({});
         });
         setVoiceChatMessages(updatedHistory);
 
-        // فحص الكلمات التي نجح الطالب في توظيفها (يدعم الحروف الفرنسية واليابانية والألمانية والإسبانية!)
         const lowerSpoken = spokenText.replace(/[^\p{L}\p{N}\s]/gu, '').toLowerCase();
         lessonTargetVocabulary.forEach((vocab, vIdx) => {
           const cleanV = vocab.replace(/[^\p{L}\p{N}\s]/gu, '').toLowerCase().trim();
@@ -1145,9 +2327,6 @@ const neuralAudioCacheRef = useRef({});
     setLiveInterimTranscript('');
   };
 
-  // ============================================================================
-  // 🎙️🔥 نظام "اضغط مطولاً للتحدث" (Push-to-Talk) - يتعرف على لغة الكورس تلقائياً!
-  // ============================================================================
   const startHoldToTalk = (e) => {
     if (e && e.cancelable) e.preventDefault();
     if (isCoachThinking || isMicRecordingCoach) return;
@@ -1260,6 +2439,8 @@ const neuralAudioCacheRef = useRef({});
     setUsedLessonWords([]);
     setRoleplaySceneMeta(null);
     setMissionSpotlightIdx(0);
+    setSurgeonCritique(null);
+    setSurgeonStatusMsg('');
     if (activeLesson) {
       if (activeLesson.section) {
         setOpenSections(prev => ({ ...prev, [activeLesson.section]: true }));
@@ -1274,7 +2455,7 @@ const neuralAudioCacheRef = useRef({});
         initBuilderGame(0, parsedAudio);
       }
     }
-  }, [activeLesson]);
+  }, [activeLesson?._id]);
 
   const handleTapScrambledToken = (tokenObj) => {
     const nextSelected = [...selectedTokens, tokenObj];
@@ -1304,6 +2485,9 @@ const neuralAudioCacheRef = useRef({});
     setBuilderSuccess(null);
   };
 
+  // ============================================================================
+  // 🏆 نظام التقدم والشهادات والاختبارات
+  // ============================================================================
   const handleCompleteLesson = async () => {
     const token = localStorage.getItem('cherif_token');
     if (!token || String(activeLesson?._id).startsWith('lesson_')) {
@@ -1440,7 +2624,7 @@ const neuralAudioCacheRef = useRef({});
     setCodeFeedback(null);
 
     try {
-    const res = await axios.post('http://localhost:5000/api/academy2/verify-student-code', {
+      const res = await axios.post('http://localhost:5000/api/academy2/verify-student-code', {
         taskQuestion: activeLesson.codingPractice.taskQuestion,
         studentCode: studentCode,
         solutionCode: activeLesson.codingPractice.solutionCode,
@@ -1558,7 +2742,7 @@ const neuralAudioCacheRef = useRef({});
       `}} />
 
       {/* ======================================================= */}
-      {/* 🗂️ القائمة الجانبية (Sidebar) */}
+      {/* 🗂️ القائمة الجانبية (Sidebar) + جراح الكورس والوحدات للأدمين */}
       {/* ======================================================= */}
       <div className={`fixed md:static inset-y-0 right-0 z-40 w-80 bg-[#0b1120] border-l border-slate-800/70 transform ${sidebarOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'} transition-transform duration-300 flex flex-col shadow-2xl`}>
         
@@ -1567,21 +2751,67 @@ const neuralAudioCacheRef = useRef({});
             <ArrowRight size={15} /> العودة للكورس
           </Link>
 
-          <input
-            type="file"
-            accept=".json"
-            ref={jsonInputRef}
-            onChange={handleImportLocalJSONFile}
-            className="hidden"
-          />
-          <button
-            type="button"
-            onClick={() => jsonInputRef.current?.click()}
-            className="bg-indigo-500/15 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/30 px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all"
-            title="فتح ملف JSON للكورس أو الشهادة الكاملة مباشرة"
-          >
-            <Upload size={12} /> فتح JSON
-          </button>
+          {canEditCourse && (
+            <>
+
+            <div className="p-4 border-b border-slate-800/60 flex justify-between items-center bg-[#0b1120] sticky top-0 z-10 gap-2">
+          <Link to={`/course/${id}`} className="text-emerald-400 hover:text-emerald-300 flex items-center gap-1.5 font-semibold text-xs transition-colors shrink-0">
+            <ArrowRight size={15} /> العودة
+          </Link>
+
+          {canEditCourse && (
+            <div className="flex items-center gap-1.5">
+              <input
+                type="file"
+                accept=".json"
+                ref={jsonInputRef}
+                onChange={handleImportLocalJSONFile}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => jsonInputRef.current?.click()}
+                className="bg-indigo-500/15 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/30 px-2 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all"
+                title="فتح ملف JSON للكورس أو الشهادة الكاملة مباشرة"
+              >
+                <Upload size={12} /> JSON
+              </button>
+
+              {/* 🟢 الزر السحري الجديد لحفظ كل شيء في قاعدة البيانات */}
+              <button
+                type="button"
+                disabled={isSyncingCourse}
+                onClick={handleSyncFullCourseToDB}
+                className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-3 py-1.5 rounded-lg text-[10px] font-black flex items-center gap-1 transition-all shadow-[0_0_10px_rgba(16,185,129,0.3)] disabled:opacity-50"
+                title="مزامنة جميع التعديلات والحذف وإضافات الـ AI إلى قاعدة البيانات فوراً"
+              >
+                <RefreshCw size={12} className={isSyncingCourse ? 'animate-spin' : ''} />
+                {isSyncingCourse ? 'جاري الحفظ...' : 'حفظ التعديلات 💾'}
+              </button>
+            </div>
+          )}
+
+          <button onClick={() => setSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-white transition-colors shrink-0"><X size={20} /></button>
+        </div>
+
+        
+              <input
+                type="file"
+                accept=".json"
+                ref={jsonInputRef}
+                onChange={handleImportLocalJSONFile}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => jsonInputRef.current?.click()}
+                className="bg-indigo-500/15 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/30 px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all"
+                title="فتح ملف JSON للكورس أو الشهادة الكاملة مباشرة"
+              >
+                <Upload size={12} /> فتح JSON
+              </button>
+            </>
+          )}
 
           <button onClick={() => setSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-white transition-colors"><X size={20} /></button>
         </div>
@@ -1645,29 +2875,251 @@ const neuralAudioCacheRef = useRef({});
           )}
         </div>
 
+        {/* ======================================================= */}
+        {/* 🌍 جراح الكراش كورس الشامل (Course-Level Surgeon - خاص بالأدمين) */}
+        {/* ======================================================= */}
+        {canEditCourse && (
+          <div className="px-3.5 py-3 bg-gradient-to-r from-amber-950/30 via-[#070d19] to-indigo-950/30 border-b border-amber-500/30 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-black text-amber-300 flex items-center gap-1.5">
+                <Stethoscope size={13} className="text-amber-400" /> 🌍 جراح الكورس الشامل
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsCourseSurgeonOpen(!isCourseSurgeonOpen)}
+                className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition-all ${
+                  isCourseSurgeonOpen
+                    ? 'bg-amber-500 text-slate-950 border-amber-400'
+                    : 'bg-amber-500/15 text-amber-300 border-amber-500/30 hover:bg-amber-500 hover:text-slate-950'
+                }`}
+              >
+                {isCourseSurgeonOpen ? 'إغلاق ▲' : 'هندسة الوحدات ▼'}
+              </button>
+            </div>
+
+            {isCourseSurgeonOpen && (
+              <div className="space-y-2.5 pt-1 animate-fade-in">
+                <div className="grid grid-cols-3 gap-1">
+                  <button
+                    type="button"
+                    disabled={isOperatingLesson}
+                    onClick={() => handleExecuteCourseSurgeon('بصفتك الناقد العالمي Rater: راجع تسلسل وحدات هذا الكورس وأضف وحدة انتقالية أو مشروعاً يربط الوحدات ببعضها بتماسك 100%.')}
+                    className="bg-slate-900 hover:bg-amber-500/20 border border-slate-700 hover:border-amber-400 text-[10px] font-bold text-amber-300 p-1.5 rounded-lg text-center"
+                  >
+                    🧐 رؤية الناقد
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isOperatingLesson}
+                    onClick={() => handleExecuteCourseSurgeon('بصفتك الأستاذ الخبير: ادمج الوحدات المتشابهة، وأضف وحدة تطبيقية لما ينقص الكورس علمياً.')}
+                    className="bg-slate-900 hover:bg-indigo-500/20 border border-slate-700 hover:border-indigo-400 text-[10px] font-bold text-indigo-300 p-1.5 rounded-lg text-center"
+                  >
+                    👨‍🏫 رؤية الأستاذ
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isOperatingLesson}
+                    onClick={() => handleExecuteCourseSurgeon('بصفتك التلميذ الذكي: أضف وحدة مراجعة سريعة وتحديات ممتعة قبل نهاية الكورس لتثبيت المهارات.')}
+                    className="bg-slate-900 hover:bg-emerald-500/20 border border-slate-700 hover:border-emerald-400 text-[10px] font-bold text-emerald-300 p-1.5 rounded-lg text-center"
+                  >
+                    🎓 رؤية التلميذ
+                  </button>
+                </div>
+
+                <textarea
+                  value={courseSurgeonCommand}
+                  onChange={(e) => setCourseSurgeonCommand(e.target.value)}
+                  placeholder="أمر جراحي للكورس (مثال: أضف وحدة محادثات المطار قبل الوحدة الأخيرة، أو رتب الوحدات من الأسهل للأصعب)..."
+                  rows={2}
+                  className="w-full bg-slate-950 border border-amber-500/40 rounded-xl p-2 text-[11px] text-white outline-none resize-none"
+                />
+                <button
+                  type="button"
+                  disabled={isOperatingLesson || !courseSurgeonCommand.trim()}
+                  onClick={() => handleExecuteCourseSurgeon()}
+                  className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[11px] py-2 rounded-xl transition-all disabled:opacity-50"
+                >
+                  {isOperatingLesson ? '⏳ جاري هندسة الكورس...' : '⚡ نفّذ على هيكل الكورس بالـ AI'}
+                </button>
+
+                <div className="pt-2 border-t border-slate-800/80 flex items-center gap-1.5">
+                  <input
+                    type="text"
+                    value={newUnitNameInput}
+                    onChange={(e) => setNewUnitNameInput(e.target.value)}
+                    placeholder="اسم وحدة جديدة يدوياً..."
+                    className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-[11px] text-white outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddNewUnitToCourse}
+                    className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-[11px] px-2.5 py-1.5 rounded-lg flex items-center gap-1 shrink-0"
+                  >
+                    <Plus size={12} /> وحدة
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="flex-1 overflow-y-auto p-3.5 space-y-3 custom-scrollbar">
           {Object.entries(groupedLessons).map(([sectionName, sectionLessons], sIndex) => {
             const completedInSection = sectionLessons.filter(l => completedLessons.includes(l._id)).length;
             const isSectionOpen = openSections[sectionName] || false;
             const isProjectSection = sectionName.includes('مشروع') || sectionName.includes('GitHub') || sectionName.includes('تحدي');
+            const isThisUnitSurgeonActive = activeUnitSurgeon === sectionName;
 
             return (
               <div key={sIndex} className={`border rounded-xl overflow-hidden transition-all duration-300 ${isProjectSection ? 'bg-emerald-950/15 border-emerald-500/30' : 'bg-[#060b16] border-slate-800/70'}`}>
                 
-                <button 
-                  onClick={() => toggleSection(sectionName)}
-                  className={`w-full flex items-center justify-between p-3.5 transition-all duration-200 ${isSectionOpen ? 'bg-slate-800/60 border-b border-slate-800' : 'hover:bg-slate-900/80'}`}
-                >
-                  <div className="text-right flex-1 pl-2">
+                <div className={`w-full flex items-center justify-between p-3.5 transition-all duration-200 ${isSectionOpen ? 'bg-slate-800/60 border-b border-slate-800' : 'hover:bg-slate-900/80'}`}>
+                  <button 
+                    type="button"
+                    onClick={() => toggleSection(sectionName)}
+                    className="text-right flex-1 pl-2"
+                  >
                     <h3 className={`heading-font font-bold text-[13.5px] mb-1 leading-[1.5] ${isSectionOpen ? 'text-emerald-400' : 'text-slate-200'}`}>
                       {sectionName}
                     </h3>
                     <p className="text-[11px] text-slate-500 font-medium">{completedInSection} / {sectionLessons.length} محطات مكتملة</p>
+                  </button>
+
+                  <div className="flex items-center gap-1.5">
+                    {canEditCourse && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (isThisUnitSurgeonActive) {
+                            setActiveUnitSurgeon(null);
+                          } else {
+                            setActiveUnitSurgeon(sectionName);
+                            setEditingUnitNameValue(sectionName);
+                          }
+                        }}
+                        className={`p-1.5 rounded-lg border transition-all ${
+                          isThisUnitSurgeonActive
+                            ? 'bg-amber-500 text-slate-950 border-amber-400 shadow'
+                            : 'bg-slate-900 hover:bg-amber-500/20 text-amber-400 border-amber-500/30'
+                        }`}
+                        title="جراح الوحدة (إضافة/حذف دروس أو تعديل الوحدة بالـ AI)"
+                      >
+                        <Stethoscope size={13} />
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => toggleSection(sectionName)}
+                      className={`shrink-0 transition-transform duration-300 ${isSectionOpen ? 'text-emerald-400 rotate-180' : 'text-slate-500'}`}
+                    >
+                      <ChevronDown size={16} />
+                    </button>
                   </div>
-                  <div className={`shrink-0 transition-transform duration-300 ${isSectionOpen ? 'text-emerald-400 rotate-180' : 'text-slate-500'}`}>
-                    <ChevronDown size={16} />
+                </div>
+
+                {/* ======================================================= */}
+                {/* 🏗️ لوحة جراح الوحدة الدراسية (Unit-Level Surgeon - خاص بالأدمين) */}
+                {/* ======================================================= */}
+                {canEditCourse && isThisUnitSurgeonActive && (
+                  <div className="p-3 bg-amber-950/25 border-b border-amber-500/30 space-y-2.5 animate-fade-in">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-black text-amber-300">
+                        🏗️ جراح الوحدة: {sectionName.slice(0, 26)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteUnit(sectionName)}
+                        className="text-[10px] bg-rose-500/20 hover:bg-rose-600 text-rose-300 hover:text-white px-2 py-0.5 rounded font-bold flex items-center gap-1"
+                        title="حذف هذه الوحدة بالكامل"
+                      >
+                        <Trash2 size={11} /> حذف الوحدة
+                      </button>
+                    </div>
+
+                    {/* أزرار الثلاثي السريعة للوحدة */}
+                    <div className="grid grid-cols-3 gap-1">
+                      <button
+                        type="button"
+                        disabled={isOperatingLesson}
+                        onClick={() => handleExecuteUnitSurgeon(sectionName, sectionLessons, 'بصفتك الناقد العالمي: رتب دروس هذه الوحدة وأضف درساً يربط بينها بتسلسل منطقي متماسك.')}
+                        className="bg-slate-950 hover:bg-amber-500/20 border border-slate-800 text-[10px] font-bold text-amber-300 py-1 rounded"
+                      >
+                        🧐 الناقد
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isOperatingLesson}
+                        onClick={() => handleExecuteUnitSurgeon(sectionName, sectionLessons, 'بصفتك الأستاذ الخبير: احذف أي تكرار في عناوين الدروس وأضف درساً يغطي الفجوة العلمية في هذه الوحدة.')}
+                        className="bg-slate-950 hover:bg-indigo-500/20 border border-slate-800 text-[10px] font-bold text-indigo-300 py-1 rounded"
+                      >
+                        👨‍🏫 الأستاذ
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isOperatingLesson}
+                        onClick={() => handleExecuteUnitSurgeon(sectionName, sectionLessons, 'بصفتك التلميذ الذكي: أضف في نهاية هذه الوحدة درس مراجعة وتطبيق عملي مبسط.')}
+                        className="bg-slate-950 hover:bg-emerald-500/20 border border-slate-800 text-[10px] font-bold text-emerald-300 py-1 rounded"
+                      >
+                        🎓 التلميذ
+                      </button>
+                    </div>
+
+                    {/* أمر AI مخصص للوحدة */}
+                    <textarea
+                      value={unitSurgeonCommand}
+                      onChange={(e) => setUnitSurgeonCommand(e.target.value)}
+                      placeholder="أمر بالـ AI لهذه الوحدة (مثال: أضف درسين عن النطق، أو ادمج الدرس 1 و 2)..."
+                      rows={2}
+                      className="w-full bg-slate-950 border border-amber-500/40 rounded-lg p-2 text-[11px] text-white outline-none resize-none"
+                    />
+                    <button
+                      type="button"
+                      disabled={isOperatingLesson || !unitSurgeonCommand.trim()}
+                      onClick={() => handleExecuteUnitSurgeon(sectionName, sectionLessons)}
+                      className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[11px] py-1.5 rounded-lg transition-all disabled:opacity-50"
+                    >
+                      {isOperatingLesson ? '⏳ جاري تعديل الوحدة...' : '🤖 نفّذ تعديل الوحدة بالـ AI'}
+                    </button>
+
+                    {/* تعديل اسم الوحدة يدوياً */}
+                    <div className="flex items-center gap-1 pt-1 border-t border-slate-800">
+                      <input
+                        type="text"
+                        value={editingUnitNameValue}
+                        onChange={(e) => setEditingUnitNameValue(e.target.value)}
+                        placeholder="تعديل اسم الوحدة..."
+                        className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-[11px] text-white outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleRenameUnit(sectionName, editingUnitNameValue)}
+                        className="bg-slate-800 hover:bg-slate-700 text-amber-300 text-[10px] font-bold px-2.5 py-1 rounded-lg shrink-0"
+                      >
+                        ✏️ تسمية
+                      </button>
+                    </div>
+
+                    {/* إضافة درس جديد يدوياً داخل هذه الوحدة */}
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="text"
+                        value={newLessonTitleInUnit}
+                        onChange={(e) => setNewLessonTitleInUnit(e.target.value)}
+                        placeholder="عنوان درس جديد في هذه الوحدة..."
+                        className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-[11px] text-white outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleAddLessonToUnit(sectionName)}
+                        className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-[10px] px-2.5 py-1 rounded-lg shrink-0 flex items-center gap-0.5"
+                      >
+                        <Plus size={11} /> درس
+                      </button>
+                    </div>
                   </div>
-                </button>
+                )}
 
                 {isSectionOpen && (
                   <div className="p-2 space-y-1 bg-[#040811]">
@@ -1750,14 +3202,34 @@ const neuralAudioCacheRef = useRef({});
 
               {activeUnitSummary && (
                 <div className="mb-8 bg-gradient-to-r from-indigo-950/50 via-[#0b1120] to-[#0b1120] border border-indigo-500/30 rounded-2xl p-5 shadow-lg">
-                  <div className="flex items-center justify-between cursor-pointer" onClick={() => setShowUnitSummaryBanner(!showUnitSummaryBanner)}>
-                    <div className="flex items-center gap-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => setShowUnitSummaryBanner(!showUnitSummaryBanner)}>
                       <Target size={18} className="text-amber-400 shrink-0" />
                       <span className="heading-font text-sm font-bold text-indigo-300">
                         بوصلة الوحدة الحالية: {activeLesson.section}
                       </span>
                     </div>
-                    <ChevronDown size={16} className={`text-slate-400 transition-transform ${showUnitSummaryBanner ? 'rotate-180' : ''}`} />
+
+                    <div className="flex items-center gap-2">
+                      {canEditCourse && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSidebarOpen(true);
+                            setActiveUnitSurgeon(activeUnitSurgeon === activeLesson.section ? null : activeLesson.section);
+                            setEditingUnitNameValue(activeLesson.section);
+                          }}
+                          className="bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/30 px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all"
+                        >
+                          <Stethoscope size={12} /> جراحة هذه الوحدة
+                        </button>
+                      )}
+                      <ChevronDown
+                        size={16}
+                        onClick={() => setShowUnitSummaryBanner(!showUnitSummaryBanner)}
+                        className={`text-slate-400 cursor-pointer transition-transform ${showUnitSummaryBanner ? 'rotate-180' : ''}`}
+                      />
+                    </div>
                   </div>
 
                   {showUnitSummaryBanner && (
@@ -1930,7 +3402,7 @@ const neuralAudioCacheRef = useRef({});
               ) : (
 
                 /* ======================================================= */
-                /* 📘 الدرس العادي: الشرح + استوديو Speak Class الثلاثي الاحترافي */
+                /* 📘 الدرس العادي: الشرح + استوديو الجراحة الشامل لجميع العناصر */
                 /* ======================================================= */
                 <div>
                   <div className="flex flex-wrap items-center gap-2 mb-4">
@@ -1958,13 +3430,368 @@ const neuralAudioCacheRef = useRef({});
                     </p>
                   )}
 
-                  {visualWidgets.legoEquations.length > 0 && (
+                  {/* ======================================================= */}
+                  {/* 🩺✨ غرفة الجراحة الذكية ومجلس الحكماء الثلاثي (AI Lesson Surgeon) */}
+                  {/* 🛡️ لا يظهر هذا الصندوق أبداً إلا للأدمين أو الأستاذ صاحب الكورس! */}
+                  {/* ======================================================= */}
+                  {isCourseOwnerOrAdmin && (
+                    <div className="mb-8 bg-gradient-to-br from-amber-950/25 via-[#0b1120] to-indigo-950/25 border-2 border-amber-500/40 rounded-2xl p-5 shadow-xl">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-amber-300 shrink-0">
+                            <Sparkles size={20} />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 className="heading-font text-sm md:text-base font-black text-white">
+                                🩺 المُشرط الذكي ومجلس الحكماء الثلاثي (AI Lesson Surgeon)
+                              </h3>
+                              <span className="text-[10px] font-black bg-rose-500/20 text-rose-300 border border-rose-500/40 px-2 py-0.5 rounded-full">
+                                🔒 خاص بالأدمين فقط
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-400">
+                              استلهم من (الناقد Rater، الأستاذ، والتلميذ)، أو عدّل واحذف أي قسم أو عنصر في الدرس مع حفظ تلقائي فوري!
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setStudentPreviewMode(!studentPreviewMode)}
+                            className={`text-xs font-bold px-3 py-2 rounded-xl border flex items-center gap-1.5 transition-all ${
+                              studentPreviewMode
+                                ? 'bg-sky-500 text-slate-950 border-sky-400 font-black'
+                                : 'bg-slate-900 hover:bg-slate-800 text-sky-300 border-sky-500/30'
+                            }`}
+                            title="شاهد الدرس تماماً كما يراه التلميذ بدون أزرار التعديل"
+                          >
+                            {studentPreviewMode ? <Eye size={14} /> : <EyeOff size={14} />}
+                            {studentPreviewMode ? 'العودة لوضع الأدمين 🩺' : 'معاينة كـتلميذ 🎓'}
+                          </button>
+
+                          {lessonUndoStack.length > 0 && !studentPreviewMode && (
+                            <button
+                              type="button"
+                              onClick={handleUndoLastSurgeonEdit}
+                              className="bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold px-3 py-2 rounded-xl border border-amber-500/30 flex items-center gap-1.5"
+                            >
+                              <RotateCcw size={13} /> تراجع ({lessonUndoStack.length})
+                            </button>
+                          )}
+                          {!studentPreviewMode && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={handleExportUpdatedJSON}
+                                className="bg-emerald-500/15 hover:bg-emerald-600 text-emerald-300 hover:text-white text-xs font-bold px-3 py-2 rounded-xl border border-emerald-500/30 transition-all"
+                              >
+                                💾 حفظ JSON المحدث
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const nextState = !isSurgeonOpen;
+                                  setIsSurgeonOpen(nextState);
+                                  if (nextState && !surgeonCritique) handleAnalyzeCurrentLesson();
+                                }}
+                                className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs px-4 py-2 rounded-xl transition-all shadow"
+                              >
+                                {isSurgeonOpen ? 'إغلاق المحرر الجراحي ▲' : 'فتح المحرر واقتراحات الـ AI ▼'}
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {!studentPreviewMode && isSurgeonOpen && (
+                        <div className="mt-5 pt-5 border-t border-slate-800/90 space-y-5">
+                          <div className="bg-slate-950/90 border border-slate-800 rounded-2xl p-4 space-y-4">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className="text-xs font-black text-amber-400 flex items-center gap-1.5">
+                                <Sparkles size={15} /> 🧠 استلهم التعديلات من مجلس الحكماء الثلاثي:
+                              </span>
+
+                              {surgeonCritique?.applyAllCommand && (
+                                <button
+                                  type="button"
+                                  disabled={isOperatingLesson}
+                                  onClick={() => handleExecuteSurgeonCommand(surgeonCritique.applyAllCommand, 'apply_all_personas')}
+                                  className="bg-gradient-to-r from-emerald-500 via-teal-400 to-amber-400 hover:from-emerald-400 hover:to-amber-300 text-slate-950 font-black text-xs px-4 py-2 rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.35)] flex items-center gap-1.5 transition-all disabled:opacity-50"
+                                >
+                                  <Zap size={14} /> 🚀 تطبيق كل توصيات الثلاثي دفعة واحدة (Apply All)
+                                </button>
+                              )}
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActivePersonaTab('rater');
+                                  if (!surgeonCritique) handleAnalyzeCurrentLesson();
+                                }}
+                                className={`p-3 rounded-xl border text-right transition-all ${
+                                  activePersonaTab === 'rater'
+                                    ? 'bg-amber-500/20 border-amber-400 text-white shadow'
+                                    : 'bg-slate-900/90 border-slate-800 text-slate-300 hover:border-slate-700'
+                                }`}
+                              >
+                                <div className="font-black text-xs text-amber-300">🧐 1. إلهام الناقد والـ Rater</div>
+                                <p className="text-[11px] text-slate-400 mt-1">ماذا نضيف ليصبح الدرس متماسكاً ومثالياً 100%؟</p>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActivePersonaTab('teacher');
+                                  if (!surgeonCritique) handleAnalyzeCurrentLesson();
+                                }}
+                                className={`p-3 rounded-xl border text-right transition-all ${
+                                  activePersonaTab === 'teacher'
+                                    ? 'bg-indigo-500/20 border-indigo-400 text-white shadow'
+                                    : 'bg-slate-900/90 border-slate-800 text-slate-300 hover:border-slate-700'
+                                }`}
+                              >
+                                <div className="font-black text-xs text-indigo-300">👨‍🏫 2. إلهام الأستاذ الخبير</div>
+                                <p className="text-[11px] text-slate-400 mt-1">ما الذي ينقص الدرس؟ وما الحشو الذي يجب حذفه أو تعديله؟</p>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActivePersonaTab('student');
+                                  if (!surgeonCritique) handleAnalyzeCurrentLesson();
+                                }}
+                                className={`p-3 rounded-xl border text-right transition-all ${
+                                  activePersonaTab === 'student'
+                                    ? 'bg-emerald-500/20 border-emerald-400 text-white shadow'
+                                    : 'bg-slate-900/90 border-slate-800 text-slate-300 hover:border-slate-700'
+                                }`}
+                              >
+                                <div className="font-black text-xs text-emerald-300">🎓 3. إلهام التلميذ الذكي</div>
+                                <p className="text-[11px] text-slate-400 mt-1">ماذا يريد التلميذ إضافته بالمنتصف ليفهم الدرس أسرع؟</p>
+                              </button>
+                            </div>
+
+                            {surgeonCritique?.personas && activePersonaTab !== 'all' && surgeonCritique.personas[activePersonaTab] && (
+                              <div className="bg-[#060c1a] border border-amber-500/40 rounded-xl p-4 space-y-3 animate-fade-in">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <h4 className="font-black text-xs sm:text-sm text-amber-300">
+                                    {surgeonCritique.personas[activePersonaTab].roleTitle}
+                                  </h4>
+                                  <button
+                                    type="button"
+                                    onClick={() => setActivePersonaTab('all')}
+                                    className="text-[11px] text-slate-400 hover:text-white"
+                                  >
+                                    إخفاء التفصيل
+                                  </button>
+                                </div>
+
+                                <p className="text-xs text-slate-200 leading-relaxed">
+                                  {surgeonCritique.personas[activePersonaTab].diagnosis ||
+                                    surgeonCritique.personas[activePersonaTab].whatIsMissing ||
+                                    surgeonCritique.personas[activePersonaTab].studentNeed}
+                                </p>
+
+                                {surgeonCritique.personas[activePersonaTab].whatToDeleteOrEdit && (
+                                  <p className="text-xs text-rose-300 bg-rose-950/30 border border-rose-500/30 p-2.5 rounded-lg">
+                                    ✂️ <strong>ما يجب حذفه أو تعديله:</strong> {surgeonCritique.personas[activePersonaTab].whatToDeleteOrEdit}
+                                  </p>
+                                )}
+
+                                <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                                  <span className="text-xs font-bold text-emerald-300">
+                                    💡 الاقتراح الجاهز: {surgeonCritique.personas[activePersonaTab].suggestionTitle}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    disabled={isOperatingLesson}
+                                    onClick={() =>
+                                      handleExecuteSurgeonCommand(
+                                        surgeonCritique.personas[activePersonaTab].command,
+                                        `persona_${activePersonaTab}`
+                                      )
+                                    }
+                                    className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs px-4 py-2 rounded-xl transition-all"
+                                  >
+                                    ⚡ طبّق توصية {activePersonaTab === 'rater' ? 'الناقد' : activePersonaTab === 'teacher' ? 'الأستاذ' : 'التلميذ'} الآن
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-xs font-bold text-amber-300 ml-1">⚡ حقن فوري في منتصف الدرس:</span>
+                            <button
+                              type="button"
+                              disabled={isOperatingLesson}
+                              onClick={() =>
+                                handleExecuteSurgeonCommand(
+                                  'أضف في منتصف الدرس (مباشرة بعد القسم 2 جدول المفردات وقبل القسم 3) قسماً تفاعلياً بعنوان (### 🧩 محطة منتصف الدرس: املأ الفراغ التفاعلي) يضم 4 جمل قصيرة من مفردات الدرس بصيغة [[الإجابة_الصحيحة | خيار_خاطئ_1 | خيار_خاطئ_2]].',
+                                  'inject_mid_fill_blank'
+                                )
+                              }
+                              className="bg-indigo-500/20 hover:bg-indigo-600 text-indigo-200 hover:text-white border border-indigo-500/40 text-xs font-bold px-3.5 py-2 rounded-xl transition-all disabled:opacity-50"
+                            >
+                              🧩 + إضافة (املأ الفراغ التفاعلي) بمنتصف الدرس
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={isOperatingLesson}
+                              onClick={() =>
+                                handleExecuteSurgeonCommand(
+                                  'أضف في منتصف الدرس (بعد القسم 3 سُلّم البناء) صندوقاً بعنوان (### 💡 شفرة الذاكرة السريعة وحيلة النطق) يلخص أهم قاعدة في الدرس بأسلوب بصري لا يُنسى.',
+                                  'inject_mid_custom'
+                                )
+                              }
+                              className="bg-purple-500/20 hover:bg-purple-600 text-purple-200 hover:text-white border border-purple-500/40 text-xs font-bold px-3.5 py-2 rounded-xl transition-all disabled:opacity-50"
+                            >
+                              🧠 + حقن (شفرة ذاكرة) بمنتصف الدرس
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={isOperatingLesson}
+                              onClick={() =>
+                                handleExecuteSurgeonCommand(
+                                  'احذف أي فقرات مكررة أو حشو غير مهم في الدرس، واجعل الشرح مكثفاً ومباشراً ومناسباً تماماً لمستوى الطالب.',
+                                  'prune_fluff'
+                                )
+                              }
+                              className="bg-rose-500/15 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/30 text-xs font-bold px-3.5 py-2 rounded-xl transition-all disabled:opacity-50"
+                            >
+                              ✂️ حذف الحشو وتكثيف الدرس
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={isAnalyzingLesson}
+                              onClick={handleAnalyzeCurrentLesson}
+                              className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3 py-2 rounded-xl mr-auto flex items-center gap-1"
+                            >
+                              <RefreshCw size={13} className={isAnalyzingLesson ? 'animate-spin' : ''} /> إعادة فحص الدرس بالثلاثي الذكي
+                            </button>
+                          </div>
+
+                          {isAnalyzingLesson ? (
+                            <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-4 text-xs text-indigo-300 animate-pulse flex items-center gap-2">
+                              <Bot size={16} className="text-amber-400" /> مجلس الحكماء (الناقد + الأستاذ + التلميذ) يقرأ محتوى الدرس الآن ويستخرج أفضل الإضافات...
+                            </div>
+                          ) : surgeonCritique ? (
+                            <div className="space-y-3">
+                              <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-2">
+                                <span className="text-xs text-slate-300">
+                                  🎯 <strong>تقييم الناقد الأكاديمي:</strong> {surgeonCritique.raterVerdict}
+                                </span>
+                                <span className="text-xs font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-3 py-1 rounded-full">
+                                  جودة الدرس: {surgeonCritique.qualityScore || 92}%
+                                </span>
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                {(surgeonCritique.midLessonSuggestions || []).map((sug, sIdx) => (
+                                  <div
+                                    key={sug.id || sIdx}
+                                    className="bg-slate-950/90 border border-slate-800 hover:border-amber-500/50 rounded-xl p-3.5 flex flex-col justify-between gap-3 transition-all"
+                                  >
+                                    <div>
+                                      <span className="text-[10px] font-black bg-amber-500/15 text-amber-300 px-2 py-0.5 rounded-full">
+                                        {sug.badge || '💡 اقتراح منتصف الدرس'}
+                                      </span>
+                                      <h4 className="font-bold text-white text-xs mt-2">{sug.title}</h4>
+                                      <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">{sug.why}</p>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      disabled={isOperatingLesson}
+                                      onClick={() => handleExecuteSurgeonCommand(sug.command, sug.operationType)}
+                                      className="w-full bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 font-black text-xs py-2 rounded-lg transition-all"
+                                    >
+                                      + احقن هذا العنصر في الدرس الآن
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+
+                              {surgeonCritique.fluffToPrune && (
+                                <div className="bg-rose-950/20 border border-rose-500/30 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                  <div className="text-xs">
+                                    <strong className="text-rose-300 block">{surgeonCritique.fluffToPrune.title}</strong>
+                                    <span className="text-slate-300">{surgeonCritique.fluffToPrune.whatToRemove}</span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    disabled={isOperatingLesson}
+                                    onClick={() => handleExecuteSurgeonCommand(surgeonCritique.fluffToPrune.command, 'prune_fluff')}
+                                    className="shrink-0 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs px-4 py-2 rounded-lg"
+                                  >
+                                    ✂️ نفّذ الحذف والتنظيف
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          ) : null}
+
+                          <div className="flex flex-col sm:flex-row gap-2.5">
+                            <input
+                              type="text"
+                              value={customSurgeonCommand}
+                              onChange={(e) => setCustomSurgeonCommand(e.target.value)}
+                              placeholder="اكتب أمرك الجراحي هنا (مثال: أضف تمرين املأ الفراغ من 5 جمل في منتصف الدرس حول الألوان، أو احذف الحوار واستبدله بحوار في المطار)..."
+                              className="flex-1 bg-slate-950 border border-slate-700 focus:border-amber-400 rounded-xl px-4 py-3 text-xs sm:text-sm text-white outline-none"
+                            />
+                            <button
+                              type="button"
+                              disabled={isOperatingLesson || !customSurgeonCommand.trim()}
+                              onClick={() => handleExecuteSurgeonCommand(customSurgeonCommand, 'custom')}
+                              className="bg-gradient-to-l from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-black text-xs sm:text-sm px-6 py-3 rounded-xl transition-all disabled:opacity-50 shrink-0"
+                            >
+                              {isOperatingLesson ? '⏳ جاري التعديل...' : '🩺 نفّذ التعديل على الدرس'}
+                            </button>
+                          </div>
+
+                          {surgeonStatusMsg && (
+                            <div className="text-xs font-bold text-emerald-300 bg-emerald-950/30 border border-emerald-500/30 px-4 py-2.5 rounded-xl">
+                              {surgeonStatusMsg}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ======================================================= */}
+                  {/* 🧩 معادلة مكعبات الليغو (مع شريط التحكم الجراحي) */}
+                  {/* ======================================================= */}
+                  {!activeLesson.hideLegoWidget && effectiveLegoEquations.length > 0 && (
                     <div className="mb-10 bg-gradient-to-br from-amber-950/25 via-[#0b1120] to-[#0b1120] border-2 border-amber-500/35 rounded-2xl p-6 shadow-xl">
+                      <WidgetSurgeonBar
+                        widgetTitle="🧩 معادلة مكعبات الليغو لبناء الصوت والجملة"
+                        widgetType="lego"
+                        initialData={effectiveLegoEquations.join('\n')}
+                        isOperating={isOperatingLesson}
+                        onSaveManual={(newText) => {
+                          const lines = String(newText).split('\n').map(l => l.trim()).filter(Boolean);
+                          applyUpdatedLessonToState({ ...activeLesson, customLegoEquations: lines }, 'تم تعديل معادلات الليغو يدوياً!');
+                        }}
+                        onRunAiEdit={(instruction) =>
+                          handleExecuteSurgeonCommand(`في قسم معادلة التركيب البصرية (Lego Formula): ${instruction}`, 'edit_lego_widget')
+                        }
+                        onDeleteWidget={() =>
+                          applyUpdatedLessonToState({ ...activeLesson, hideLegoWidget: true }, 'تم حذف صندوق معادلة الليغو من الدرس!')
+                        }
+                      />
+
                       <h3 className="heading-font text-lg font-bold text-amber-400 mb-4 flex items-center gap-2">
                         <Puzzle size={20} /> 🧩 معادلة مكعبات الليغو لبناء الصوت والجملة (Lego Formula):
                       </h3>
                       <div className="space-y-3">
-                        {visualWidgets.legoEquations.map((eq, idx) => (
+                        {effectiveLegoEquations.map((eq, idx) => (
                           <div key={idx} className="bg-slate-950/90 border border-slate-800 p-4 rounded-xl flex flex-wrap items-center gap-2 text-sm md:text-base font-bold text-white" dir="auto">
                             {eq.split('+').map((part, pIdx, arr) => (
                               <React.Fragment key={pIdx}>
@@ -1984,8 +3811,35 @@ const neuralAudioCacheRef = useRef({});
                     </div>
                   )}
 
-                  {visualWidgets.ladderSteps.length > 0 && (
+                  {/* ======================================================= */}
+                  {/* 🪜 سُلّم البناء التراكمي الناطق (مع شريط التحكم الجراحي) */}
+                  {/* ======================================================= */}
+                  {!activeLesson.hideLadderWidget && effectiveLadderSteps.length > 0 && (
                     <div className="mb-10 bg-gradient-to-br from-indigo-950/30 via-[#0b1120] to-[#0b1120] border-2 border-indigo-500/35 rounded-2xl p-6 shadow-xl">
+                      <WidgetSurgeonBar
+                        widgetTitle="🪜 سُلّم البناء التراكمي الناطق"
+                        widgetType="ladder"
+                        initialData={effectiveLadderSteps.map(s => s.rawText).join('\n')}
+                        isOperating={isOperatingLesson}
+                        onSaveManual={(newText) => {
+                          const steps = String(newText)
+                            .split('\n')
+                            .map(l => l.trim())
+                            .filter(Boolean)
+                            .map(cleanStep => {
+                              const foreignMatch = cleanStep.match(/([A-Za-z\u00C0-\u024F\u3040-\u30ff\u4e00-\u9faf][A-Za-z\u00C0-\u024F\u3040-\u30ff\u4e00-\u9faf\s,.?!'’¿¡-]+)/);
+                              return { rawText: cleanStep, englishText: foreignMatch ? foreignMatch[1].trim() : '' };
+                            });
+                          applyUpdatedLessonToState({ ...activeLesson, customLadderSteps: steps }, 'تم تعديل سُلّم البناء التراكمي يدوياً!');
+                        }}
+                        onRunAiEdit={(instruction) =>
+                          handleExecuteSurgeonCommand(`في قسم سُلّم البناء والارتقاء التراكمي (Escalation Ladder): ${instruction}`, 'edit_ladder_widget')
+                        }
+                        onDeleteWidget={() =>
+                          applyUpdatedLessonToState({ ...activeLesson, hideLadderWidget: true }, 'تم حذف سُلّم البناء التراكمي من الدرس!')
+                        }
+                      />
+
                       <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
                         <h3 className="heading-font text-lg font-bold text-indigo-300 flex items-center gap-2">
                           <Layers size={20} className="text-emerald-400" /> 🪜 سُلّم البناء التراكمي الناطق باللغة {activeLangConfig.nameAr} (اضغط على كل درجة لسماعها):
@@ -1995,7 +3849,7 @@ const neuralAudioCacheRef = useRef({});
                         </span>
                       </div>
                       <div className="space-y-2.5">
-                        {visualWidgets.ladderSteps.map((step, sIdx) => {
+                        {effectiveLadderSteps.map((step, sIdx) => {
                           const widthPercent = Math.min(100, 62 + sIdx * 8);
                           return (
                             <div
@@ -2027,38 +3881,52 @@ const neuralAudioCacheRef = useRef({});
                     </div>
                   )}
 
+                  {/* ======================================================= */}
+                  {/* 🧱 عرض محتوى الدرس مقسماً إلى أقسام قابلة للتعديل اليدوي أو بالـ AI أو الحذف */}
+                  {/* ======================================================= */}
                   <div className="lesson-content">
                     {activeLesson.content ? (
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        components={{
+                      <EditableLessonBlocks
+                        rawMarkdown={sanitizeLessonMarkdown(activeLesson.content, true)}
+                        isOperating={isOperatingLesson}
+                        onSaveFullMarkdown={(newMarkdownContent, reportMsg) =>
+                          applyUpdatedLessonToState({ ...activeLesson, content: newMarkdownContent }, reportMsg)
+                        }
+                        onAiEditBlock={handleAiEditSingleSection}
+                        markdownComponents={{
                           h1({children}) {
-                            return <h2 className="heading-font text-xl md:text-[26px] font-bold text-white mt-12 mb-5 leading-[1.4]">{children}</h2>
+                            return <h2 className="heading-font text-xl md:text-[26px] font-bold text-white mt-6 mb-5 leading-[1.4]">{children}</h2>
                           },
                           h2({children}) {
-                            return <h2 className="heading-font text-xl md:text-[25px] font-bold text-white mt-12 mb-5 leading-[1.4]">{children}</h2>
+                            return <h2 className="heading-font text-xl md:text-[25px] font-bold text-white mt-6 mb-5 leading-[1.4]">{children}</h2>
                           },
                           h3({children}) {
                             return (
-                              <h3 className="heading-font text-[20px] md:text-[23px] font-bold text-emerald-400 mt-12 mb-5 py-2.5 pr-4 pl-3 bg-gradient-to-l from-emerald-950/30 to-transparent border-r-4 border-emerald-500 rounded-l-lg flex items-center gap-2.5 leading-[1.4]">
+                              <h3 className="heading-font text-[20px] md:text-[23px] font-bold text-emerald-400 mt-4 mb-5 py-2.5 pr-4 pl-3 bg-gradient-to-l from-emerald-950/30 to-transparent border-r-4 border-emerald-500 rounded-l-lg flex items-center gap-2.5 leading-[1.4]">
                                 {children}
                               </h3>
                             )
                           },
                           h4({children}) {
                             return (
-                              <h4 className="heading-font text-[17.5px] md:text-[19.5px] font-bold text-sky-400 mt-8 mb-3 flex items-center gap-2 leading-[1.5]">
+                              <h4 className="heading-font text-[17.5px] md:text-[19.5px] font-bold text-sky-400 mt-6 mb-3 flex items-center gap-2 leading-[1.5]">
                                 <span className="w-2 h-2 rounded-full bg-sky-400 inline-block shrink-0"></span>
                                 {children}
                               </h4>
                             )
                           },
                           p({children}) {
+                            const rawText = React.Children.toArray(children)
+                              .map(c => (typeof c === 'string' ? c : c?.props?.children || ''))
+                              .join('');
+                            if (rawText.includes('[[') && rawText.includes(']]')) {
+                              return <InlineFillBlankSentence rawText={rawText} onSpeak={handlePlayAudioText} />;
+                            }
                             return (
                               <p className="text-[#cbd5e1] text-[16px] md:text-[17px] leading-[2.0] mb-6 font-normal">
                                 {children}
                               </p>
-                            )
+                            );
                           },
                           strong({children}) {
                             return (
@@ -2074,12 +3942,22 @@ const neuralAudioCacheRef = useRef({});
                             return <ol className="list-decimal list-inside space-y-3 mb-7 pr-2 text-[#cbd5e1] text-[16px] md:text-[17px] leading-[1.9]">{children}</ol>
                           },
                           li({children}) {
+                            const rawText = React.Children.toArray(children)
+                              .map(c => (typeof c === 'string' ? c : c?.props?.children || ''))
+                              .join('');
+                            if (rawText.includes('[[') && rawText.includes(']]')) {
+                              return (
+                                <li className="list-none my-2">
+                                  <InlineFillBlankSentence rawText={rawText} onSpeak={handlePlayAudioText} />
+                                </li>
+                              );
+                            }
                             return (
                               <li className="text-[#cbd5e1] text-[16px] md:text-[17px] leading-[1.9] flex items-start gap-3">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-3 shrink-0"></span>
                                 <div className="flex-1">{children}</div>
                               </li>
-                            )
+                            );
                           },
                           blockquote({children}) {
                             return (
@@ -2109,7 +3987,7 @@ const neuralAudioCacheRef = useRef({});
                           th({children}) {
                             return <th className="p-3.5 md:p-4 font-bold text-right">{children}</th>
                           },
-td({children}) {
+                          td({children}) {
                             const extractRawString = (node) => {
                               if (typeof node === 'string') return node;
                               if (Array.isArray(node)) return node.map(extractRawString).join('');
@@ -2158,7 +4036,6 @@ td({children}) {
                               </td>
                             );
                           },
-
                           code({node, inline, className, children, ...props}) {
                             const match = /language-(\w+)/.exec(className || '');
                             const codeStr = String(children).replace(/\n$/, '');
@@ -2200,9 +4077,7 @@ td({children}) {
                             )
                           }
                         }}
-                      >
-                        {sanitizeLessonMarkdown(activeLesson.content, true)}
-                      </ReactMarkdown>
+                      />
                     ) : (
                       <div className="text-center py-24">
                         <BookOpen size={48} className="mx-auto text-slate-700 mb-4 animate-pulse" />
@@ -2211,8 +4086,27 @@ td({children}) {
                     )}
                   </div>
 
-                  {visualWidgets.mistakeRows.length > 0 && (
+                  {/* ======================================================= */}
+                  {/* 📋 3. جدول الخلاصة التصحيحية (مع شريط التحكم الجراحي) */}
+                  {/* ======================================================= */}
+                  {!activeLesson.hideMistakesWidget && effectiveMistakeRows.length > 0 && (
                     <div className="mt-10 bg-[#0b1120] border-2 border-emerald-500/35 rounded-2xl p-6 shadow-xl">
+                      <WidgetSurgeonBar
+                        widgetTitle="📋 جدول الخلاصة التصحيحية (لا تقل كذا ❌ .. بل قل كذا ✅)"
+                        widgetType="mistakes"
+                        initialData={effectiveMistakeRows}
+                        isOperating={isOperatingLesson}
+                        onSaveManual={(updatedRows) =>
+                          applyUpdatedLessonToState({ ...activeLesson, customMistakeRows: updatedRows }, 'تم تحديث جدول الخلاصة التصحيحية يدوياً!')
+                        }
+                        onRunAiEdit={(instruction) =>
+                          handleExecuteSurgeonCommand(`في قسم ورشة الكتابة وتصحيح الأخطاء الشائعة (❌ الخطأ الشائع / ✅ الصواب الأصيل / 💡 السبب اللغوي): ${instruction}`, 'edit_mistakes_widget')
+                        }
+                        onDeleteWidget={() =>
+                          applyUpdatedLessonToState({ ...activeLesson, hideMistakesWidget: true }, 'تم حذف جدول الخلاصة التصحيحية من هذا الدرس!')
+                        }
+                      />
+
                       <h3 className="heading-font text-lg md:text-xl font-bold text-emerald-400 mb-4 flex items-center gap-2">
                         <CheckCircle size={20} /> 📋 جدول الخلاصة التصحيحية: لا تقل كذا ❌ .. بل قل كذا ✅
                       </h3>
@@ -2226,7 +4120,7 @@ td({children}) {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-800/80">
-                            {visualWidgets.mistakeRows.map((row, rIdx) => (
+                            {effectiveMistakeRows.map((row, rIdx) => (
                               <tr key={rIdx} className="hover:bg-slate-900/40">
                                 <td className="p-3.5 text-red-200/90 bg-red-950/10">{row.wrong}</td>
                                 <td className="p-3.5 text-emerald-200 font-semibold bg-emerald-950/10">{row.right}</td>
@@ -2240,11 +4134,26 @@ td({children}) {
                   )}
 
                   {/* ======================================================= */}
-                  {/* 🎙️🔥 4. استوديو "Speak Class" الثلاثي الاحترافي (متعدد اللغات) */}
+                  {/* 🎙️🔥 4. استوديو "Speak Class" الثلاثي الاحترافي (مع شريط التحكم الجراحي) */}
                   {/* ======================================================= */}
-                  {(isLanguageLesson || visualWidgets.voicePrompt) && (
+                  {!activeLesson.hideSpeakClassWidget && (isLanguageLesson || visualWidgets.voicePrompt) && (
                     <div className="mt-12 bg-gradient-to-br from-[#0f172a] via-[#0b1120] to-[#131129] border-2 border-indigo-500/40 rounded-3xl p-6 md:p-8 shadow-[0_0_60px_rgba(99,102,241,0.12)] space-y-6">
-                      
+                      <WidgetSurgeonBar
+                        widgetTitle="🎙️ غرفة المحادثة الحية (Live Speak Class)"
+                        widgetType="lego"
+                        initialData={activeLesson.customVoiceTitle || activeLesson.title}
+                        isOperating={isOperatingLesson}
+                        onSaveManual={(newTitle) =>
+                          applyUpdatedLessonToState({ ...activeLesson, customVoiceTitle: String(newTitle).trim() }, 'تم تحديث عنوان وسيناريو غرفة المحادثة الحية!')
+                        }
+                        onRunAiEdit={(instruction) =>
+                          handleExecuteSurgeonCommand(`في قسم التدريب الصوتي الحي ومفردات المحادثة (Live AI Voice Tutor & codeSnippet): ${instruction}`, 'edit_speak_class')
+                        }
+                        onDeleteWidget={() =>
+                          applyUpdatedLessonToState({ ...activeLesson, hideSpeakClassWidget: true }, 'تم إخفاء غرفة المحادثة الحية من هذا الدرس!')
+                        }
+                      />
+
                       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800/90 pb-5">
                         <div className="flex items-start gap-4">
                           <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 border-2 transition-all ${
@@ -2266,7 +4175,7 @@ td({children}) {
                               </span>
                             </div>
                             <h3 className="heading-font text-xl md:text-2xl font-black text-white">
-                              غرفة المحادثة الحية باللغة {activeLangConfig.nameAr}: {activeLesson.title}
+                              غرفة المحادثة الحية باللغة {activeLangConfig.nameAr}: {activeLesson.customVoiceTitle || activeLesson.title}
                             </h3>
                             <p className="text-xs text-slate-400 mt-1">
                               اختر نوع الغرفة التدريبية بالأسفل، وتحدث باللغة {activeLangConfig.nameAr} باستخدام تقنية <strong className="text-emerald-300">اضغط مطولاً للتحدث (Push-to-Talk)</strong>!
@@ -2484,7 +4393,6 @@ td({children}) {
                         </div>
                       ) : (
                         <div className="space-y-4">
-                          
                           <div className="bg-[#050811] border border-slate-800 rounded-2xl p-4 md:p-6 max-h-[460px] overflow-y-auto space-y-5 custom-scrollbar">
                             {voiceChatMessages.map((msg, mIdx) => {
                               const isTextHiddenForEarTraining = blindListeningMode && msg.role === 'coach' && !revealedCoachMsgIds[msg.id];
@@ -2708,7 +4616,6 @@ td({children}) {
                           )}
 
                           <div className="bg-slate-950 border-2 border-slate-800 rounded-2xl p-4 flex flex-col md:flex-row items-stretch md:items-center gap-3">
-                            
                             {!isMicRecordingCoach ? (
                               <button
                                 type="button"
@@ -2765,368 +4672,417 @@ td({children}) {
                               </button>
                             </form>
                           </div>
-
                         </div>
                       )}
                     </div>
                   )}
 
                   {/* ======================================================= */}
-                  {/* 🎧🃏🧩 5. المختبر الصوتي التفاعلي ثلاثي الأطوار (متعدد اللغات) */}
+                  {/* 🎧🃏🧩 5. المختبر الصوتي التفاعلي + دليل الأذن (مع شريط التحكم الجراحي لكل منهما!) */}
                   {/* ======================================================= */}
-                  {activeLesson.codeSnippet && activeLesson.codeSnippet.trim() !== '' && (
+                  {((activeLesson.codeSnippet && activeLesson.codeSnippet.trim() !== '') || (activeLesson.codeExplanation && activeLesson.codeExplanation.trim() !== '')) && (
                     <div className="mt-12 mb-12 pt-8 border-t border-slate-800/70">
                       
-                      {audioStudioItems.length > 0 ? (
-                        <div className="bg-[#0b1120] border-2 border-purple-500/40 rounded-2xl p-6 md:p-7 shadow-2xl space-y-6">
-                          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800 pb-4">
-                            <div>
-                              <span className="text-xs font-bold text-purple-400 flex items-center gap-1.5 mb-1">
-                                <Headphones size={15} /> Interactive {activeLangConfig.nameEn} Phonics & Audio Studio ({activeLangConfig.flag})
-                              </span>
-                              <h3 className="heading-font text-xl md:text-2xl font-bold text-white">
-                                🎧 استوديو الصوتيات ({activeLangConfig.nameAr})، بطاقات الذاكرة، ولعبة تركيب المكعبات
-                              </h3>
-                            </div>
+                      {activeLesson.codeSnippet && activeLesson.codeSnippet.trim() !== '' && (
+                        audioStudioItems.length > 0 ? (
+                          <div className="bg-[#0b1120] border-2 border-purple-500/40 rounded-2xl p-6 md:p-7 shadow-2xl space-y-6">
+                            <WidgetSurgeonBar
+                              widgetTitle="🎧 استوديو الصوتيات، بطاقات الذاكرة، ولعبة تركيب المكعبات"
+                              widgetType="audio_studio"
+                              initialData={activeLesson.codeSnippet}
+                              isOperating={isOperatingLesson}
+                              onSaveManual={(newSnippet) =>
+                                applyUpdatedLessonToState({ ...activeLesson, codeSnippet: String(newSnippet) }, 'تم تحديث جمل استوديو الصوتيات يدوياً!')
+                              }
+                              onRunAiEdit={(instruction) =>
+                                handleExecuteSurgeonCommand(`في حقل استوديو الاستماع والترديد (codeSnippet): ${instruction}`, 'edit_audio_studio')
+                              }
+                              onDeleteWidget={() =>
+                                applyUpdatedLessonToState({ ...activeLesson, codeSnippet: '' }, 'تم حذف استوديو الصوتيات من هذا الدرس!')
+                              }
+                            />
 
-                            <div className="flex flex-wrap items-center gap-2 bg-slate-950 p-1.5 rounded-xl border border-slate-800">
-                              {[
-                                { id: 'table', label: '📋 جدول الاستماع (3 سرعات)' },
-                                { id: 'flashcards', label: '🃏 بطاقات الذاكرة الناطقة' },
-                                { id: 'builder', label: '🧩 لعبة تركيب المكعبات باللمس' }
-                              ].map(mode => (
-                                <button
-                                  key={mode.id}
-                                  type="button"
-                                  onClick={() => setStudioMode(mode.id)}
-                                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                                    studioMode === mode.id
-                                      ? 'bg-purple-600 text-white shadow'
-                                      : 'text-slate-400 hover:text-white'
-                                  }`}
-                                >
-                                  {mode.label}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
+                            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+                              <div>
+                                <span className="text-xs font-bold text-purple-400 flex items-center gap-1.5 mb-1">
+                                  <Headphones size={15} /> Interactive {activeLangConfig.nameEn} Phonics & Audio Studio ({activeLangConfig.flag})
+                                </span>
+                                <h3 className="heading-font text-xl md:text-2xl font-bold text-white">
+                                  🎧 استوديو الصوتيات ({activeLangConfig.nameAr})، بطاقات الذاكرة، ولعبة تركيب المكعبات
+                                </h3>
+                              </div>
 
-                          {studioMode === 'table' && (
-                            <>
-                              <div className="flex flex-wrap items-center justify-between gap-2">
-                                <p className="text-xs text-slate-400">
-                                  استمع لكل كلمة أو جملة باللغة {activeLangConfig.nameAr} بـ 3 سرعات، ثم اضغط على زر <strong className="text-rose-300">🎤 انطق</strong> لاختبار نطقك بالمايكروفون:
-                                </p>
-                                <div className="flex items-center gap-2">
+                              <div className="flex flex-wrap items-center gap-2 bg-slate-950 p-1.5 rounded-xl border border-slate-800">
+                                {[
+                                  { id: 'table', label: '📋 جدول الاستماع (3 سرعات)' },
+                                  { id: 'flashcards', label: '🃏 بطاقات الذاكرة الناطقة' },
+                                  { id: 'builder', label: '🧩 لعبة تركيب المكعبات باللمس' }
+                                ].map(mode => (
                                   <button
+                                    key={mode.id}
                                     type="button"
-                                    onClick={() => handlePlayAudioText(activeLesson.codeSnippet, 1.0, 'all_studio')}
-                                    className="bg-purple-500/15 hover:bg-purple-600 text-purple-300 hover:text-white border border-purple-500/30 text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 transition-all"
+                                    onClick={() => setStudioMode(mode.id)}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                      studioMode === mode.id
+                                        ? 'bg-purple-600 text-white shadow'
+                                        : 'text-slate-400 hover:text-white'
+                                    }`}
                                   >
-                                    <Volume2 size={14} /> تشغيل الكل (1.0x)
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handlePlayAudioText(activeLesson.codeSnippet, 0.75, 'all_studio')}
-                                    className="bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/30 text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 transition-all"
-                                  >
-                                    🐢 ترديد بطيء (0.75x)
-                                  </button>
-                                  {speakingKey && (
-                                    <button
-                                      type="button"
-                                      onClick={handleStopAudio}
-                                      className="bg-red-500/20 hover:bg-red-600 text-red-300 hover:text-white text-xs font-bold px-3 py-1.5 rounded-xl border border-red-500/30 flex items-center gap-1"
-                                    >
-                                      <Square size={12} /> إيقاف
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-
-                              <div className="overflow-x-auto rounded-xl border border-slate-800 bg-[#050811]">
-                                <table className="w-full text-right border-collapse">
-                                  <thead>
-                                    <tr className="bg-slate-900 border-b border-slate-800 text-xs font-bold text-slate-400">
-                                      <th className="p-3.5 w-10 text-center">#</th>
-                                      <th className="p-3.5">الكلمة / الجملة ({activeLangConfig.nameAr})</th>
-                                      <th className="p-3.5">الرمز الصوتي (IPA)</th>
-                                      <th className="p-3.5">المعنى بالعربية</th>
-                                      <th className="p-3.5 text-center">استمع (3 سرعات) + اختبر نطقك</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-slate-800/70 text-sm">
-                                    {audioStudioItems.map((item, idx) => (
-                                      <tr key={idx} className="hover:bg-slate-900/50 transition-colors">
-                                        <td className="p-3.5 text-center font-bold text-purple-400 code-font">{item.order || idx + 1}</td>
-                                        <td className="p-3.5 font-bold text-white text-base" dir="ltr">
-                                          <span className="mr-2">{item.emoji}</span>
-                                          {item.sentence}
-                                        </td>
-                                        <td className="p-3.5 code-font text-emerald-400 text-xs" dir="ltr">{item.ipa}</td>
-                                        <td className="p-3.5 text-slate-300">{item.meaning}</td>
-                                        <td className="p-3.5">
-                                          <div className="flex items-center justify-center gap-1.5 flex-wrap">
-                                            <button
-                                              type="button"
-                                              onClick={() => handlePlayAudioText(item.sentence, 1.0, `sent_${idx}`)}
-                                              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 ${
-                                                speakingKey === `sent_${idx}_1`
-                                                  ? 'bg-purple-500 text-white'
-                                                  : 'bg-purple-500/15 hover:bg-purple-500/30 text-purple-300 border border-purple-500/30'
-                                              }`}
-                                            >
-                                              <Volume2 size={12} /> 1.0x
-                                            </button>
-                                            <button
-                                              type="button"
-                                              onClick={() => handlePlayAudioText(item.sentence, 0.75, `sent_${idx}`)}
-                                              className={`px-2 py-1 rounded-lg text-[11px] font-bold ${
-                                                speakingKey === `sent_${idx}_0.75`
-                                                  ? 'bg-amber-500 text-slate-950'
-                                                  : 'bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30'
-                                              }`}
-                                            >
-                                              🐢 0.75x
-                                            </button>
-                                            <button
-                                              type="button"
-                                              onClick={() => handlePlayAudioText(item.sentence, 0.5, `sent_${idx}`)}
-                                              className={`px-2 py-1 rounded-lg text-[11px] font-bold ${
-                                                speakingKey === `sent_${idx}_0.5`
-                                                  ? 'bg-emerald-500 text-slate-950'
-                                                  : 'bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30'
-                                              }`}
-                                            >
-                                              🧒 0.5x
-                                            </button>
-                                            <button
-                                              type="button"
-                                              onClick={() => handleTestPronunciationMic(item.sentence, idx)}
-                                              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 border ${
-                                                listeningRowIdx === idx
-                                                  ? 'bg-rose-500 text-white border-rose-400 animate-pulse'
-                                                  : 'bg-slate-900 hover:bg-slate-800 text-rose-300 border-rose-500/30'
-                                              }`}
-                                            >
-                                              <Mic size={11} /> {listeningRowIdx === idx ? 'انطق الآن...' : 'انطق'}
-                                            </button>
-                                          </div>
-                                        </td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            </>
-                          )}
-
-                          {studioMode === 'flashcards' && currentFlashcard && (
-                            <div className="bg-slate-950 border border-slate-800 rounded-2xl p-6 text-center space-y-5">
-                              <div className="flex items-center justify-between text-xs text-slate-400">
-                                <span>بطاقة الذاكرة {activeCardIdx + 1} من {audioStudioItems.length}</span>
-                                <span>اضغط على البطاقة لقلبها أو لسماع النطق باللغة {activeLangConfig.nameAr} 🔊</span>
-                              </div>
-
-                              <div
-                                onClick={() => {
-                                  setIsCardFlipped(!isCardFlipped);
-                                  handlePlayAudioText(currentFlashcard.sentence, 0.9, `card_${activeCardIdx}`);
-                                }}
-                                className="min-h-[210px] bg-gradient-to-br from-indigo-950/60 via-slate-900 to-purple-950/50 border-2 border-purple-500/40 hover:border-amber-400 rounded-2xl p-8 flex flex-col items-center justify-center cursor-pointer transition-all shadow-xl select-none"
-                              >
-                                <span className="text-5xl mb-3">{currentFlashcard.emoji}</span>
-                                {!isCardFlipped ? (
-                                  <>
-                                    <h4 className="text-3xl font-black text-white tracking-wide" dir="ltr">
-                                      {currentFlashcard.sentence}
-                                    </h4>
-                                    <p className="code-font text-emerald-400 text-sm mt-2" dir="ltr">
-                                      {currentFlashcard.ipa}
-                                    </p>
-                                    <span className="text-[11px] text-purple-300 mt-4 bg-purple-500/15 px-3 py-1 rounded-full">
-                                      اضغط لكشف المعنى العربي وسماع الصوت 🔊
-                                    </span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <h4 className="heading-font text-2xl font-black text-amber-400">
-                                      {currentFlashcard.meaning}
-                                    </h4>
-                                    <p className="text-lg font-bold text-white mt-2" dir="ltr">
-                                      {currentFlashcard.sentence}
-                                    </p>
-                                    <span className="text-[11px] text-slate-400 mt-4">
-                                      اضغط للعودة لوجه اللغة {activeLangConfig.nameAr}
-                                    </span>
-                                  </>
-                                )}
-                              </div>
-
-                              <div className="flex items-center justify-center gap-3">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const prev = (activeCardIdx - 1 + audioStudioItems.length) % audioStudioItems.length;
-                                    setActiveCardIdx(prev);
-                                    setIsCardFlipped(false);
-                                  }}
-                                  className="bg-slate-900 hover:bg-slate-800 border border-slate-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl"
-                                >
-                                  ← البطاقة السابقة
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handlePlayAudioText(currentFlashcard.sentence, 0.75, `card_slow_${activeCardIdx}`)}
-                                  className="bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/40 text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5"
-                                >
-                                  <Volume2 size={15} /> نطق بطيء (0.75x)
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const next = (activeCardIdx + 1) % audioStudioItems.length;
-                                    setActiveCardIdx(next);
-                                    setIsCardFlipped(false);
-                                  }}
-                                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl"
-                                >
-                                  البطاقة التالية →
-                                </button>
-                              </div>
-                            </div>
-                          )}
-
-                          {studioMode === 'builder' && currentBuilderItem && (
-                            <div className="bg-slate-950 border border-slate-800 rounded-2xl p-6 space-y-5">
-                              <div className="flex items-center justify-between flex-wrap gap-2">
-                                <div>
-                                  <span className="text-xs font-bold text-amber-400 block">
-                                    🧩 التحدي {builderTargetIdx + 1} من {audioStudioItems.length}: ركب باللمس ما يعبر باللغة {activeLangConfig.nameAr} عن:
-                                  </span>
-                                  <h4 className="heading-font text-lg font-black text-white mt-1">
-                                    {currentBuilderItem.emoji} المعنى المطلوب: "{currentBuilderItem.meaning}"
-                                  </h4>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => handlePlayAudioText(currentBuilderItem.sentence, 0.8, 'builder_hint')}
-                                    className="bg-purple-500/20 hover:bg-purple-600 text-purple-300 hover:text-white border border-purple-500/30 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5"
-                                  >
-                                    <Volume2 size={14} /> اسمع الكلمة/الجملة
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => initBuilderGame(builderTargetIdx)}
-                                    className="bg-slate-900 hover:bg-slate-800 text-slate-300 p-2 rounded-xl border border-slate-700"
-                                    title="إعادة خلط المكعبات"
-                                  >
-                                    <RotateCcw size={15} />
-                                  </button>
-                                </div>
-                              </div>
-
-                              <div className="min-h-[68px] bg-[#060b16] border-2 border-dashed border-indigo-500/40 rounded-xl p-4 flex flex-wrap items-center justify-center gap-2" dir="ltr">
-                                {selectedTokens.length === 0 ? (
-                                  <span className="text-xs text-slate-500">اضغط على المكعبات بالأسفل لترتيبها هنا...</span>
-                                ) : (
-                                  selectedTokens.map((tok) => (
-                                    <button
-                                      key={tok.id}
-                                      type="button"
-                                      onClick={() => handleRemoveSelectedToken(tok)}
-                                      className="bg-indigo-600 hover:bg-red-600 text-white font-black text-base px-4 py-2 rounded-xl shadow transition-all"
-                                    >
-                                      {tok.text}
-                                    </button>
-                                  ))
-                                )}
-                              </div>
-
-                              <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2" dir="ltr">
-                                {scrambledTokens.map((tok) => (
-                                  <button
-                                    key={tok.id}
-                                    type="button"
-                                    onClick={() => handleTapScrambledToken(tok)}
-                                    className="bg-slate-900 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border-2 border-amber-500/40 font-black text-base px-4 py-2 rounded-xl transition-all shadow"
-                                  >
-                                    {tok.text}
+                                    {mode.label}
                                   </button>
                                 ))}
                               </div>
-
-                              {builderSuccess === true && (
-                                <div className="bg-emerald-950/40 border border-emerald-500/50 text-emerald-300 p-4 rounded-xl flex items-center justify-between">
-                                  <span className="font-bold text-sm">🎉 ممتاز! ركبت المكعبات بالترتيب الصحيح 100%!</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => initBuilderGame((builderTargetIdx + 1) % audioStudioItems.length)}
-                                    className="bg-emerald-500 text-slate-950 font-black text-xs px-4 py-2 rounded-lg"
-                                  >
-                                    الجملة التالية ←
-                                  </button>
-                                </div>
-                              )}
-                              {builderSuccess === false && (
-                                <div className="bg-red-950/40 border border-red-500/50 text-red-300 p-3.5 rounded-xl flex items-center justify-between text-xs font-bold">
-                                  <span>❌ الترتيب غير مطابق تماماً، اضغط على المكعبات لإعادة المحاولة!</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => initBuilderGame(builderTargetIdx)}
-                                    className="bg-red-600 text-white px-3 py-1.5 rounded-lg"
-                                  >
-                                    إعادة المحاولة
-                                  </button>
-                                </div>
-                              )}
                             </div>
-                          )}
 
-                          {speechCheckResult && (
-                            <div className={`p-4 rounded-xl border text-sm flex items-center justify-between gap-4 ${
-                              speechCheckResult.isGoodMatch
-                                ? 'bg-emerald-950/35 border-emerald-500/40 text-emerald-200'
-                                : 'bg-amber-950/35 border-amber-500/40 text-amber-200'
-                            }`}>
-                              <div>
-                                <p className="font-bold">
-                                  {speechCheckResult.isGoodMatch ? '🎉 نطق ممتاز وواضح جداً!' : '💡 قريب جداً! حاول ضبط مخارج الحروف مرة أخرى:'}
-                                </p>
-                                <p className="text-xs mt-1" dir="ltr">
-                                  Target: <strong>"{speechCheckResult.target}"</strong> | You said: <strong>"{speechCheckResult.spoken}"</strong>
-                                </p>
+                            {studioMode === 'table' && (
+                              <>
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <p className="text-xs text-slate-400">
+                                    استمع لكل كلمة أو جملة باللغة {activeLangConfig.nameAr} بـ 3 سرعات، ثم اضغط على زر <strong className="text-rose-300">🎤 انطق</strong> لاختبار نطقك بالمايكروفون:
+                                  </p>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => handlePlayAudioText(activeLesson.codeSnippet, 1.0, 'all_studio')}
+                                      className="bg-purple-500/15 hover:bg-purple-600 text-purple-300 hover:text-white border border-purple-500/30 text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 transition-all"
+                                    >
+                                      <Volume2 size={14} /> تشغيل الكل (1.0x)
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handlePlayAudioText(activeLesson.codeSnippet, 0.75, 'all_studio')}
+                                      className="bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/30 text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 transition-all"
+                                    >
+                                      🐢 ترديد بطيء (0.75x)
+                                    </button>
+                                    {speakingKey && (
+                                      <button
+                                        type="button"
+                                        onClick={handleStopAudio}
+                                        className="bg-red-500/20 hover:bg-red-600 text-red-300 hover:text-white text-xs font-bold px-3 py-1.5 rounded-xl border border-red-500/30 flex items-center gap-1"
+                                      >
+                                        <Square size={12} /> إيقاف
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="overflow-x-auto rounded-xl border border-slate-800 bg-[#050811]">
+                                  <table className="w-full text-right border-collapse">
+                                    <thead>
+                                      <tr className="bg-slate-900 border-b border-slate-800 text-xs font-bold text-slate-400">
+                                        <th className="p-3.5 w-10 text-center">#</th>
+                                        <th className="p-3.5">الكلمة / الجملة ({activeLangConfig.nameAr})</th>
+                                        <th className="p-3.5">الرمز الصوتي (IPA)</th>
+                                        <th className="p-3.5">المعنى بالعربية</th>
+                                        <th className="p-3.5 text-center">استمع (3 سرعات) + اختبر نطقك</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-800/70 text-sm">
+                                      {audioStudioItems.map((item, idx) => (
+                                        <tr key={idx} className="hover:bg-slate-900/50 transition-colors">
+                                          <td className="p-3.5 text-center font-bold text-purple-400 code-font">{item.order || idx + 1}</td>
+                                          <td className="p-3.5 font-bold text-white text-base" dir="ltr">
+                                            <span className="mr-2">{item.emoji}</span>
+                                            {item.sentence}
+                                          </td>
+                                          <td className="p-3.5 code-font text-emerald-400 text-xs" dir="ltr">{item.ipa}</td>
+                                          <td className="p-3.5 text-slate-300">{item.meaning}</td>
+                                          <td className="p-3.5">
+                                            <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                                              <button
+                                                type="button"
+                                                onClick={() => handlePlayAudioText(item.sentence, 1.0, `sent_${idx}`)}
+                                                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 ${
+                                                  speakingKey === `sent_${idx}_1`
+                                                    ? 'bg-purple-500 text-white'
+                                                    : 'bg-purple-500/15 hover:bg-purple-500/30 text-purple-300 border border-purple-500/30'
+                                                }`}
+                                              >
+                                                <Volume2 size={12} /> 1.0x
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() => handlePlayAudioText(item.sentence, 0.75, `sent_${idx}`)}
+                                                className={`px-2 py-1 rounded-lg text-[11px] font-bold ${
+                                                  speakingKey === `sent_${idx}_0.75`
+                                                    ? 'bg-amber-500 text-slate-950'
+                                                    : 'bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30'
+                                                }`}
+                                              >
+                                                🐢 0.75x
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() => handlePlayAudioText(item.sentence, 0.5, `sent_${idx}`)}
+                                                className={`px-2 py-1 rounded-lg text-[11px] font-bold ${
+                                                  speakingKey === `sent_${idx}_0.5`
+                                                    ? 'bg-emerald-500 text-slate-950'
+                                                    : 'bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30'
+                                                }`}
+                                              >
+                                                🧒 0.5x
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() => handleTestPronunciationMic(item.sentence, idx)}
+                                                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 border ${
+                                                  listeningRowIdx === idx
+                                                    ? 'bg-rose-500 text-white border-rose-400 animate-pulse'
+                                                    : 'bg-slate-900 hover:bg-slate-800 text-rose-300 border-rose-500/30'
+                                                }`}
+                                              >
+                                                <Mic size={11} /> {listeningRowIdx === idx ? 'انطق الآن...' : 'انطق'}
+                                              </button>
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </>
+                            )}
+
+                            {studioMode === 'flashcards' && currentFlashcard && (
+                              <div className="bg-slate-950 border border-slate-800 rounded-2xl p-6 text-center space-y-5">
+                                <div className="flex items-center justify-between text-xs text-slate-400">
+                                  <span>بطاقة الذاكرة {activeCardIdx + 1} من {audioStudioItems.length}</span>
+                                  <span>اضغط على البطاقة لقلبها أو لسماع النطق باللغة {activeLangConfig.nameAr} 🔊</span>
+                                </div>
+
+                                <div
+                                  onClick={() => {
+                                    setIsCardFlipped(!isCardFlipped);
+                                    handlePlayAudioText(currentFlashcard.sentence, 0.9, `card_${activeCardIdx}`);
+                                  }}
+                                  className="min-h-[210px] bg-gradient-to-br from-indigo-950/60 via-slate-900 to-purple-950/50 border-2 border-purple-500/40 hover:border-amber-400 rounded-2xl p-8 flex flex-col items-center justify-center cursor-pointer transition-all shadow-xl select-none"
+                                >
+                                  <span className="text-5xl mb-3">{currentFlashcard.emoji}</span>
+                                  {!isCardFlipped ? (
+                                    <>
+                                      <h4 className="text-3xl font-black text-white tracking-wide" dir="ltr">
+                                        {currentFlashcard.sentence}
+                                      </h4>
+                                      <p className="code-font text-emerald-400 text-sm mt-2" dir="ltr">
+                                        {currentFlashcard.ipa}
+                                      </p>
+                                      <span className="text-[11px] text-purple-300 mt-4 bg-purple-500/15 px-3 py-1 rounded-full">
+                                        اضغط لكشف المعنى العربي وسماع الصوت 🔊
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <h4 className="heading-font text-2xl font-black text-amber-400">
+                                        {currentFlashcard.meaning}
+                                      </h4>
+                                      <p className="text-lg font-bold text-white mt-2" dir="ltr">
+                                        {currentFlashcard.sentence}
+                                      </p>
+                                      <span className="text-[11px] text-slate-400 mt-4">
+                                        اضغط للعودة لوجه اللغة {activeLangConfig.nameAr}
+                                      </span>
+                                    </>
+                                  )}
+                                </div>
+
+                                <div className="flex items-center justify-center gap-3">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const prev = (activeCardIdx - 1 + audioStudioItems.length) % audioStudioItems.length;
+                                      setActiveCardIdx(prev);
+                                      setIsCardFlipped(false);
+                                    }}
+                                    className="bg-slate-900 hover:bg-slate-800 border border-slate-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl"
+                                  >
+                                    ← البطاقة السابقة
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handlePlayAudioText(currentFlashcard.sentence, 0.75, `card_slow_${activeCardIdx}`)}
+                                    className="bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/40 text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5"
+                                  >
+                                    <Volume2 size={15} /> نطق بطيء (0.75x)
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const next = (activeCardIdx + 1) % audioStudioItems.length;
+                                      setActiveCardIdx(next);
+                                      setIsCardFlipped(false);
+                                    }}
+                                    className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl"
+                                  >
+                                    البطاقة التالية →
+                                  </button>
+                                </div>
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => setSpeechCheckResult(null)}
-                                className="text-xs text-slate-400 hover:text-white"
-                              >
-                                إغلاق
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <>
-                          <h3 className="heading-font text-[20px] md:text-[22px] font-bold text-white mb-4 flex items-center gap-2.5">
-                            <Code className="text-emerald-400" size={24} /> الكود البرمجي التطبيقي (الخلاصة)
-                          </h3>
-                          
-                          <div className="relative group rounded-xl overflow-hidden border border-slate-800 shadow-xl" dir="ltr">
-                            <div className="bg-[#0b1120] text-slate-400 text-xs px-4 py-2.5 code-font flex items-center gap-2 border-b border-slate-800">
-                              <Terminal size={14} className="text-emerald-400"/> Source Code
-                            </div>
-                            <SyntaxHighlighter style={vscDarkPlus} language="javascript" PreTag="div" customStyle={{ margin: 0, padding: '1.5rem', background: '#050811', fontSize: '0.92rem', lineHeight: '1.65' }}>
-                              {activeLesson.codeSnippet}
-                            </SyntaxHighlighter>
+                            )}
+
+                            {studioMode === 'builder' && currentBuilderItem && (
+                              <div className="bg-slate-950 border border-slate-800 rounded-2xl p-6 space-y-5">
+                                <div className="flex items-center justify-between flex-wrap gap-2">
+                                  <div>
+                                    <span className="text-xs font-bold text-amber-400 block">
+                                      🧩 التحدي {builderTargetIdx + 1} من {audioStudioItems.length}: ركب باللمس ما يعبر باللغة {activeLangConfig.nameAr} عن:
+                                    </span>
+                                    <h4 className="heading-font text-lg font-black text-white mt-1">
+                                      {currentBuilderItem.emoji} المعنى المطلوب: "{currentBuilderItem.meaning}"
+                                    </h4>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => handlePlayAudioText(currentBuilderItem.sentence, 0.8, 'builder_hint')}
+                                      className="bg-purple-500/20 hover:bg-purple-600 text-purple-300 hover:text-white border border-purple-500/30 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5"
+                                    >
+                                      <Volume2 size={14} /> اسمع الكلمة/الجملة
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => initBuilderGame(builderTargetIdx)}
+                                      className="bg-slate-900 hover:bg-slate-800 text-slate-300 p-2 rounded-xl border border-slate-700"
+                                      title="إعادة خلط المكعبات"
+                                    >
+                                      <RotateCcw size={15} />
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <div className="min-h-[68px] bg-[#060b16] border-2 border-dashed border-indigo-500/40 rounded-xl p-4 flex flex-wrap items-center justify-center gap-2" dir="ltr">
+                                  {selectedTokens.length === 0 ? (
+                                    <span className="text-xs text-slate-500">اضغط على المكعبات بالأسفل لترتيبها هنا...</span>
+                                  ) : (
+                                    selectedTokens.map((tok) => (
+                                      <button
+                                        key={tok.id}
+                                        type="button"
+                                        onClick={() => handleRemoveSelectedToken(tok)}
+                                        className="bg-indigo-600 hover:bg-red-600 text-white font-black text-base px-4 py-2 rounded-xl shadow transition-all"
+                                      >
+                                        {tok.text}
+                                      </button>
+                                    ))
+                                  )}
+                                </div>
+
+                                <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2" dir="ltr">
+                                  {scrambledTokens.map((tok) => (
+                                    <button
+                                      key={tok.id}
+                                      type="button"
+                                      onClick={() => handleTapScrambledToken(tok)}
+                                      className="bg-slate-900 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border-2 border-amber-500/40 font-black text-base px-4 py-2 rounded-xl transition-all shadow"
+                                    >
+                                      {tok.text}
+                                    </button>
+                                  ))}
+                                </div>
+
+                                {builderSuccess === true && (
+                                  <div className="bg-emerald-950/40 border border-emerald-500/50 text-emerald-300 p-4 rounded-xl flex items-center justify-between">
+                                    <span className="font-bold text-sm">🎉 ممتاز! ركبت المكعبات بالترتيب الصحيح 100%!</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => initBuilderGame((builderTargetIdx + 1) % audioStudioItems.length)}
+                                      className="bg-emerald-500 text-slate-950 font-black text-xs px-4 py-2 rounded-lg"
+                                    >
+                                      الجملة التالية ←
+                                    </button>
+                                  </div>
+                                )}
+                                {builderSuccess === false && (
+                                  <div className="bg-red-950/40 border border-red-500/50 text-red-300 p-3.5 rounded-xl flex items-center justify-between text-xs font-bold">
+                                    <span>❌ الترتيب غير مطابق تماماً، اضغط على المكعبات لإعادة المحاولة!</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => initBuilderGame(builderTargetIdx)}
+                                      className="bg-red-600 text-white px-3 py-1.5 rounded-lg"
+                                    >
+                                      إعادة المحاولة
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {speechCheckResult && (
+                              <div className={`p-4 rounded-xl border text-sm flex items-center justify-between gap-4 ${
+                                speechCheckResult.isGoodMatch
+                                  ? 'bg-emerald-950/35 border-emerald-500/40 text-emerald-200'
+                                  : 'bg-amber-950/35 border-amber-500/40 text-amber-200'
+                              }`}>
+                                <div>
+                                  <p className="font-bold">
+                                    {speechCheckResult.isGoodMatch ? '🎉 نطق ممتاز وواضح جداً!' : '💡 قريب جداً! حاول ضبط مخارج الحروف مرة أخرى:'}
+                                  </p>
+                                  <p className="text-xs mt-1" dir="ltr">
+                                    Target: <strong>"{speechCheckResult.target}"</strong> | You said: <strong>"{speechCheckResult.spoken}"</strong>
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setSpeechCheckResult(null)}
+                                  className="text-xs text-slate-400 hover:text-white"
+                                >
+                                  إغلاق
+                                </button>
+                              </div>
+                            )}
                           </div>
-                        </>
+                        ) : (
+                          <div className="bg-[#0b1120] border border-slate-800 rounded-2xl p-6 shadow-xl">
+                            <WidgetSurgeonBar
+                              widgetTitle="💻 الكود البرمجي التطبيقي (codeSnippet)"
+                              widgetType="audio_studio"
+                              initialData={activeLesson.codeSnippet}
+                              isOperating={isOperatingLesson}
+                              onSaveManual={(newSnippet) =>
+                                applyUpdatedLessonToState({ ...activeLesson, codeSnippet: String(newSnippet) }, 'تم تحديث الكود البرمجي التطبيقي يدوياً!')
+                              }
+                              onRunAiEdit={(instruction) =>
+                                handleExecuteSurgeonCommand(`في حقل الكود التطبيقي (codeSnippet): ${instruction}`, 'edit_code_snippet')
+                              }
+                              onDeleteWidget={() =>
+                                applyUpdatedLessonToState({ ...activeLesson, codeSnippet: '' }, 'تم حذف الكود التطبيقي من هذا الدرس!')
+                              }
+                            />
+
+                            <h3 className="heading-font text-[20px] md:text-[22px] font-bold text-white mb-4 flex items-center gap-2.5">
+                              <Code className="text-emerald-400" size={24} /> الكود البرمجي التطبيقي (الخلاصة)
+                            </h3>
+                            
+                            <div className="relative group rounded-xl overflow-hidden border border-slate-800 shadow-xl" dir="ltr">
+                              <div className="bg-[#0b1120] text-slate-400 text-xs px-4 py-2.5 code-font flex items-center gap-2 border-b border-slate-800">
+                                <Terminal size={14} className="text-emerald-400"/> Source Code
+                              </div>
+                              <SyntaxHighlighter style={vscDarkPlus} language="javascript" PreTag="div" customStyle={{ margin: 0, padding: '1.5rem', background: '#050811', fontSize: '0.92rem', lineHeight: '1.65' }}>
+                                {activeLesson.codeSnippet}
+                              </SyntaxHighlighter>
+                            </div>
+                          </div>
+                        )
                       )}
 
                       {activeLesson.codeExplanation && activeLesson.codeExplanation.trim() !== '' && (
                         <div className="mt-4 bg-[#081226] border border-indigo-500/25 rounded-xl p-6 relative overflow-hidden">
+                          <WidgetSurgeonBar
+                            widgetTitle={isLanguageLesson ? '🔬 دليل تدريب الأذن والنطق (Shadowing & Ear Anatomy)' : '🔬 تشريح الكود (Code Anatomy)'}
+                            widgetType="code_explanation"
+                            initialData={activeLesson.codeExplanation}
+                            isOperating={isOperatingLesson}
+                            onSaveManual={(newExp) =>
+                              applyUpdatedLessonToState({ ...activeLesson, codeExplanation: String(newExp) }, 'تم تحديث دليل تدريب الأذن يدوياً!')
+                            }
+                            onRunAiEdit={(instruction) =>
+                              handleExecuteSurgeonCommand(`في حقل دليل تدريب الأذن وتشريح النطق (codeExplanation): ${instruction}`, 'edit_code_explanation')
+                            }
+                            onDeleteWidget={() =>
+                              applyUpdatedLessonToState({ ...activeLesson, codeExplanation: '' }, 'تم حذف دليل تدريب الأذن من هذا الدرس!')
+                            }
+                          />
+
                           <h4 className="heading-font text-indigo-400 text-[18px] font-bold mb-3.5 flex items-center gap-2.5">
                             <Microscope size={20} className="text-indigo-400" /> 
                             {isLanguageLesson ? 'دليل تدريب الأذن والنطق (Shadowing & Ear Anatomy)' : 'تشريح الكود (Code Anatomy)'}
@@ -3158,10 +5114,27 @@ td({children}) {
                   )}
 
                   {/* ======================================================= */}
-                  {/* 💻✍️ 6. خانة التطبيق التفاعلي (تركيب الجمل / كتابة الكود) + 3 تلميحات */}
+                  {/* 💻✍️ 6. خانة التطبيق التفاعلي (مع شريط التحكم الجراحي: تعديل يدوي / AI / حذف) */}
                   {/* ======================================================= */}
-                  {activeLesson.codingPractice && activeLesson.codingPractice.taskQuestion && (
+                  {!activeLesson.hideCodingWidget && activeLesson.codingPractice && activeLesson.codingPractice.taskQuestion && (
                     <div className="mt-12 bg-[#081021] border-2 border-indigo-500/30 rounded-2xl p-6 md:p-8 shadow-2xl relative overflow-hidden">
+                      <WidgetSurgeonBar
+                        widgetTitle={isLanguageLesson ? `✍️ ورشة الإملاء وتركيب الجمل باللغة ${activeLangConfig.nameAr}` : '💻 مختبر كتابة الكود التفاعلي'}
+                        widgetType="coding_practice"
+                        initialData={activeLesson.codingPractice}
+                        isOperating={isOperatingLesson}
+                        onSaveManual={(updatedPractice) => {
+                          setStudentCode(updatedPractice.starterCode || '');
+                          applyUpdatedLessonToState({ ...activeLesson, codingPractice: updatedPractice }, 'تم تحديث التمرين التطبيقي والتلميحات يدوياً!');
+                        }}
+                        onRunAiEdit={(instruction) =>
+                          handleExecuteSurgeonCommand(`في حقل التمرين التطبيقي (codingPractice شاملة taskQuestion و hints و solutionCode): ${instruction}`, 'edit_coding_practice')
+                        }
+                        onDeleteWidget={() =>
+                          applyUpdatedLessonToState({ ...activeLesson, codingPractice: null, hideCodingWidget: true }, 'تم حذف ورشة الإملاء والتمرين التطبيقي من هذا الدرس!')
+                        }
+                      />
+
                       <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
                         <h3 className="heading-font text-xl md:text-2xl font-bold text-indigo-400 flex items-center gap-2.5">
                           {isLanguageLesson ? <PenTool size={24} /> : <Terminal size={24} />}
@@ -3273,12 +5246,29 @@ td({children}) {
                   )}
 
                   {/* ======================================================= */}
-                  {/* 🌟 7. سؤال نهاية الدرس الاختياري */}
+                  {/* 🌟 7. سؤال نهاية الدرس الاختياري (مع شريط التحكم الجراحي: تعديل يدوي / AI / حذف) */}
                   {/* ======================================================= */}
-                  {activeLesson.dailyQuest && activeLesson.dailyQuest.question && (
+                  {!activeLesson.hideQuestWidget && activeLesson.dailyQuest && activeLesson.dailyQuest.question && (
                     <div className="mt-14 bg-[#0b1120] border border-slate-800 rounded-2xl p-6 md:p-9 relative overflow-hidden shadow-xl">
                       <div className="absolute top-0 right-0 w-1.5 h-full bg-amber-500"></div>
                       
+                      <WidgetSurgeonBar
+                        widgetTitle="🧠 سؤال التحدي السريع (Daily Quest)"
+                        widgetType="daily_quest"
+                        initialData={activeLesson.dailyQuest}
+                        isOperating={isOperatingLesson}
+                        onSaveManual={(updatedQuest) => {
+                          handleRetryDailyQuest();
+                          applyUpdatedLessonToState({ ...activeLesson, dailyQuest: updatedQuest }, 'تم تحديث سؤال التحدي السريع وخياراته يدوياً!');
+                        }}
+                        onRunAiEdit={(instruction) =>
+                          handleExecuteSurgeonCommand(`في حقل سؤال التحدي السريع (dailyQuest شاملة question و options و correctAnswerIndex و explanation): ${instruction}`, 'edit_daily_quest')
+                        }
+                        onDeleteWidget={() =>
+                          applyUpdatedLessonToState({ ...activeLesson, dailyQuest: null, hideQuestWidget: true }, 'تم حذف سؤال التحدي السريع من هذا الدرس!')
+                        }
+                      />
+
                       <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
                         <h3 className="heading-font text-xl md:text-2xl font-bold text-white flex items-center gap-3">
                           <BrainCircuit className="text-amber-500" size={26} /> سؤال التحدي السريع (اختياري)
@@ -3406,13 +5396,15 @@ td({children}) {
                   ? 'هذا الكراش كورس لم يتم تأليف دروسه بعد، اختر الكورس 1 من القائمة الجانبية أو قم بتأليفه في المختبر!'
                   : 'لم يتم العثور على دروس من السيرفر حالياً'}
               </p>
-              <button
-                type="button"
-                onClick={() => jsonInputRef.current?.click()}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm px-6 py-3 rounded-xl flex items-center gap-2 shadow-lg"
-              >
-                <Upload size={16} /> افتح ملف JSON الكراش كورس أو الشهادة مباشرة من جهازك
-              </button>
+              {canEditCourse && (
+                <button
+                  type="button"
+                  onClick={() => jsonInputRef.current?.click()}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm px-6 py-3 rounded-xl flex items-center gap-2 shadow-lg"
+                >
+                  <Upload size={16} /> افتح ملف JSON الكراش كورس أو الشهادة مباشرة من جهازك
+                </button>
+              )}
             </div>
           )}
         </div>
