@@ -11,7 +11,7 @@ import {
   Lightbulb, ChevronDown, Microscope, Trophy, Award, Sparkles, Eye, EyeOff, Bot,
   Volume2, Headphones, Mic, Copy, Check, Square, Upload, Puzzle, PenTool,
   Target, Layers, RotateCcw, PhoneCall, PhoneOff, Send, MessageCircle, Radio, Compass, UserCheck,
-  Stethoscope, Plus, Trash2, Edit3
+  Stethoscope, Plus, Trash2, Edit3, RotateCw,
 } from 'lucide-react';
 
 // ============================================================================
@@ -458,17 +458,35 @@ const WidgetSurgeonBar = ({
         </div>
       </div>
 
-      {mode === 'ai' && (
+{mode === 'ai' && (
         <div className="mt-3 p-3.5 rounded-xl bg-indigo-950/40 border border-indigo-500/40 space-y-2.5 animate-fade-in">
-          <label className="text-xs font-bold text-indigo-300 block">
-            🤖 ماذا تريد من الذكاء الاصطناعي أن يعدل أو يضيف في ({widgetTitle})؟
-          </label>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <label className="text-xs font-bold text-indigo-300 block">
+              🤖 ماذا تريد من الذكاء الاصطناعي أن يعدل أو يضيف في ({widgetTitle})؟
+            </label>
+            <div className="flex flex-wrap items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setAiPrompt(`طوّر (${widgetTitle}) وأضف أمثلة ناطقة أكثر وضوحاً وتشويقاً تناسب مستوى الدرس.`)}
+                className="bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/30 px-2 py-1 rounded-lg text-[10px] font-black transition-all"
+              >
+                ✨ إلهام: إثراء بالأمثلة
+              </button>
+              <button
+                type="button"
+                onClick={() => setAiPrompt(`بسّط محتوى (${widgetTitle}) بأسلوب مكعبات الليغو وشفرات الذاكرة السريعة مع أمثلة عملية من الحياة اليومية.`)}
+                className="bg-purple-500/15 hover:bg-purple-500 text-purple-300 hover:text-white border border-purple-500/30 px-2 py-1 rounded-lg text-[10px] font-black transition-all"
+              >
+                🧠 إلهام: تبسيط بصري
+              </button>
+            </div>
+          </div>
           <div className="flex flex-col sm:flex-row gap-2">
             <input
               type="text"
               value={aiPrompt}
               onChange={(e) => setAiPrompt(e.target.value)}
-              placeholder={`مثال: طور (${widgetTitle})، أو أضف أمثلة وتمارين جديدة تناسب مستوى الدرس...`}
+              placeholder={`مثال: طور (${widgetTitle})، أو اضغط على أزرار الإلهام بالأعلى...`}
               className="flex-1 bg-slate-950 border border-slate-700 focus:border-indigo-400 rounded-xl px-3.5 py-2 text-xs text-white outline-none"
             />
             <button
@@ -482,6 +500,8 @@ const WidgetSurgeonBar = ({
           </div>
         </div>
       )}
+
+
 
       {mode === 'manual' && (
         <div className="mt-3 p-4 rounded-xl bg-slate-950 border-2 border-amber-500/50 space-y-3 animate-fade-in">
@@ -688,6 +708,7 @@ const EditableLessonBlocks = ({
   markdownComponents,
   onSaveFullMarkdown,
   onAiEditBlock,
+  onAiInspireBlock,
   isOperating
 }) => {
   const blocks = useMemo(() => splitMarkdownIntoBlocks(rawMarkdown), [rawMarkdown]);
@@ -696,6 +717,10 @@ const EditableLessonBlocks = ({
   const [aiPromptIdx, setAiPromptIdx] = useState(null);
   const [aiBlockInstruction, setAiBlockInstruction] = useState('');
   const [loadingBlockIdx, setLoadingBlockIdx] = useState(null);
+
+  // ✨ حالات محرك الإلهام المجهري لكل شريحة
+  const [blockInspirationsMap, setBlockInspirationsMap] = useState({});
+  const [inspiringBlockIdx, setInspiringBlockIdx] = useState(null);
 
   const handleSaveManualBlock = (idx) => {
     const nextBlocks = [...blocks];
@@ -728,6 +753,20 @@ const EditableLessonBlocks = ({
     }
   };
 
+  // ✨ طلب الإلهام الذكي لتطوير الشريحة الحالية
+  const handleGetBlockInspiration = async (idx) => {
+    if (!onAiInspireBlock) return;
+    setInspiringBlockIdx(idx);
+    try {
+      const data = await onAiInspireBlock(blocks[idx]);
+      if (data) {
+        setBlockInspirationsMap(prev => ({ ...prev, [idx]: data }));
+      }
+    } finally {
+      setInspiringBlockIdx(null);
+    }
+  };
+
   if (!window.__CHERIF_CAN_EDIT_COURSE__) {
     return (
       <div className="space-y-4">
@@ -744,6 +783,8 @@ const EditableLessonBlocks = ({
         const isManualEditing = editingIdx === bIdx;
         const isAiEditing = aiPromptIdx === bIdx;
         const isThisBlockLoading = loadingBlockIdx === bIdx;
+        const isThisBlockInspiring = inspiringBlockIdx === bIdx;
+        const currentInspiration = blockInspirationsMap[bIdx] || null;
         const firstLine = (blockMd.split('\n')[0] || '').replace(/^#+\s*/, '').slice(0, 55);
 
         return (
@@ -806,27 +847,103 @@ const EditableLessonBlocks = ({
             </div>
 
             {isAiEditing && (
-              <div className="mb-4 p-3.5 rounded-xl bg-indigo-950/35 border border-indigo-500/40 space-y-2.5 animate-fade-in">
-                <label className="text-xs font-bold text-indigo-300 block">
-                  🤖 ماذا تريد من الذكاء الاصطناعي أن يعدل أو يضيف في هذا القسم تحديداً؟
-                </label>
+              <div className="mb-4 p-4 rounded-2xl bg-indigo-950/35 border border-indigo-500/40 space-y-3.5 animate-fade-in">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
+                    🤖 ماذا تريد من الذكاء الاصطناعي أن يعدل أو يضيف في هذا القسم تحديداً؟
+                  </label>
+
+                  {/* ✨ زر الإلهام الذكي لتطوير هذه الشريحة */}
+                  <button
+                    type="button"
+                    disabled={isThisBlockInspiring || isThisBlockLoading}
+                    onClick={() => handleGetBlockInspiration(bIdx)}
+                    className="bg-gradient-to-r from-amber-500/20 via-purple-500/20 to-indigo-500/20 hover:from-amber-500 hover:to-yellow-400 text-amber-300 hover:text-slate-950 border border-amber-400/50 px-3 py-1.5 rounded-xl text-[11px] font-black flex items-center gap-1.5 transition-all shadow-[0_0_15px_rgba(245,158,11,0.2)] disabled:opacity-50"
+                  >
+                    <Sparkles size={13} className={isThisBlockInspiring ? 'animate-spin' : ''} />
+                    {isThisBlockInspiring
+                      ? '⏳ جاري استخراج الإلهام لهذه الشريحة...'
+                      : currentInspiration
+                        ? '🔄 تجديد أفكار الإلهام لهذا القسم'
+                        : '✨ ألهمني كيف أطوّر هذا القسم (AI Inspiration)'}
+                  </button>
+                </div>
+
                 <div className="flex flex-col sm:flex-row gap-2">
                   <input
                     type="text"
                     value={aiBlockInstruction}
                     onChange={(e) => setAiBlockInstruction(e.target.value)}
-                    placeholder="مثال: بسط هذه القاعدة أكثر، أو أضف 3 أمثلة جديدة..."
-                    className="flex-1 bg-slate-950 border border-slate-700 focus:border-indigo-400 rounded-xl px-3.5 py-2 text-xs text-white outline-none"
+                    placeholder="مثال: بسط هذه القاعدة أكثر، أو أضف 3 أمثلة جديدة، أو اضغط على زر (ألهمني ✨) بالأعلى..."
+                    className="flex-1 bg-slate-950 border border-slate-700 focus:border-indigo-400 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none"
                   />
                   <button
                     type="button"
                     disabled={isThisBlockLoading || !aiBlockInstruction.trim()}
                     onClick={() => handleRunAiOnBlock(bIdx)}
-                    className="bg-indigo-500 hover:bg-indigo-400 text-white font-black text-xs px-4 py-2 rounded-xl transition-all disabled:opacity-50"
+                    className="bg-indigo-500 hover:bg-indigo-400 text-white font-black text-xs px-5 py-2.5 rounded-xl transition-all disabled:opacity-50 shrink-0"
                   >
                     {isThisBlockLoading ? '⏳ جاري تحديث القسم...' : '⚡ نفّذ على هذا القسم'}
                   </button>
                 </div>
+
+                {/* 🌟 لوحة الأفكار الإلهامية المولدة خصيصاً لهذه الشريحة */}
+                {currentInspiration && (
+                  <div className="pt-3 border-t border-indigo-500/30 space-y-3 animate-fade-in">
+                    <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-950/90 border border-amber-500/30 p-3 rounded-xl">
+                      <p className="text-[11px] text-amber-200 font-semibold leading-relaxed">
+                        💡 <strong className="text-amber-400">تشخيص الشريحة:</strong> {currentInspiration.blockDiagnosis}
+                      </p>
+
+                      {currentInspiration.superchargeCommand && (
+                        <button
+                          type="button"
+                          disabled={isThisBlockLoading}
+                          onClick={() => handleRunAiOnBlock(bIdx, currentInspiration.superchargeCommand)}
+                          className="bg-gradient-to-l from-emerald-500 to-amber-400 hover:from-emerald-400 hover:to-yellow-300 text-slate-950 font-black text-[11px] px-3.5 py-1.5 rounded-lg shadow flex items-center gap-1 shrink-0 transition-all"
+                        >
+                          <Zap size={12} /> 🚀 ترقية شاملة للشريحة 10x فوراً
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                      {(currentInspiration.inspirations || []).map((item, iIdx) => (
+                        <div
+                          key={item.id || iIdx}
+                          className="bg-slate-950/90 border border-slate-800 hover:border-amber-500/50 rounded-xl p-3 flex flex-col justify-between gap-2.5 transition-all"
+                        >
+                          <div>
+                            <span className="text-[10px] font-black bg-amber-500/15 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full">
+                              {item.badge || '✨ فكرة تطوير'}
+                            </span>
+                            <h5 className="text-xs font-bold text-white mt-1.5">{item.title}</h5>
+                            <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">{item.why}</p>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => setAiBlockInstruction(item.command)}
+                              className="flex-1 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-[10px] font-bold py-1.5 px-2 rounded-lg transition-all"
+                              title="ضع هذا الأمر في الخانة لتعديله قبل التنفيذ"
+                            >
+                              ✍️ نسخ للخانة
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isThisBlockLoading}
+                              onClick={() => handleRunAiOnBlock(bIdx, item.command)}
+                              className="flex-1 bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/40 text-[10px] font-black py-1.5 px-2 rounded-lg transition-all"
+                            >
+                              ⚡ طبّق فوراً
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -869,6 +986,8 @@ const EditableLessonBlocks = ({
     </div>
   );
 };
+
+
 
 // ============================================================================
 // 🏛️ المكوّن الرئيسي: Classroom
@@ -955,31 +1074,156 @@ const Classroom = () => {
 
   const [isSyncingCourse, setIsSyncingCourse] = useState(false);
 
-  // ☁️ دالة المزامنة الشاملة لإرسال كل التعديلات والحذف والدروس الجديدة لقاعدة البيانات
-  const handleSyncFullCourseToDB = async () => {
-    if (!window.confirm('هل تريد فعلاً حفظ جميع التعديلات، وإضافات الذكاء الاصطناعي، وعمليات الحذف في قاعدة البيانات الأساسية لكي يراها الطلاب؟')) return;
+ // 🌟 نظام التراجع والإعادة العالمي (Global Undo & Redo Stacks - Time Travel)
+  const [globalUndoStack, setGlobalUndoStack] = useState([]);
+  const [globalRedoStack, setGlobalRedoStack] = useState([]);
+
+  // ↩️ التراجع للخلف (Undo)
+  const handleGlobalUndo = () => {
+    if (globalUndoStack.length === 0) return;
     
-    setIsSyncingCourse(true);
-    setSurgeonStatusMsg('🔄 جاري مزامنة الكورس بالكامل مع قاعدة البيانات הסحابية (MongoDB)...');
+    // 1. قبل التراجع، نحفظ اللحظة الحالية في مكدس "المستقبل" (Redo)
+    setGlobalRedoStack(prev => [...prev, JSON.parse(JSON.stringify(lessons))]);
     
+    // 2. نسحب آخر لقطة من مكدس "الماضي" (Undo)
+    const previousLessonsState = globalUndoStack[globalUndoStack.length - 1];
+    const newUndoStack = globalUndoStack.slice(0, -1);
+    
+    setGlobalUndoStack(newUndoStack);
+    setLessons(previousLessonsState);
+    
+    // استعادة الدرس النشط بشكل آمن
+    if (activeLesson) {
+      const restoredActive = previousLessonsState.find(l => l._id === activeLesson._id) || previousLessonsState[0];
+      setActiveLesson(restoredActive || null);
+    } else {
+      setActiveLesson(previousLessonsState[0] || null);
+    }
+
     try {
-      const res = await axios.post('http://localhost:5000/api/academy2/surgeon/sync-full-course', {
-        courseId: id,
-        lessonsList: lessons
+      const fullSnapshot = buildLiveCourseJSONSnapshot(previousLessonsState);
+      localStorage.setItem('cherif_active_local_course_json', JSON.stringify(fullSnapshot));
+    } catch (e) {}
+
+    setSurgeonStatusMsg('↩️ تم التراجع خطوة للخلف بنجاح (Undo)!');
+  };
+
+  // ↪️ الإعادة للأمام (Redo)
+  const handleGlobalRedo = () => {
+    if (globalRedoStack.length === 0) return;
+    
+    // 1. قبل التقدم للأمام، نحفظ اللحظة الحالية في مكدس "الماضي" (Undo)
+    setGlobalUndoStack(prev => [...prev, JSON.parse(JSON.stringify(lessons))]);
+    
+    // 2. نسحب آخر لقطة من مكدس "المستقبل" (Redo)
+    const nextLessonsState = globalRedoStack[globalRedoStack.length - 1];
+    const newRedoStack = globalRedoStack.slice(0, -1);
+    
+    setGlobalRedoStack(newRedoStack);
+    setLessons(nextLessonsState);
+    
+    if (activeLesson) {
+      const restoredActive = nextLessonsState.find(l => l._id === activeLesson._id) || nextLessonsState[0];
+      setActiveLesson(restoredActive || null);
+    } else {
+      setActiveLesson(nextLessonsState[0] || null);
+    }
+
+    try {
+      const fullSnapshot = buildLiveCourseJSONSnapshot(nextLessonsState);
+      localStorage.setItem('cherif_active_local_course_json', JSON.stringify(fullSnapshot));
+    } catch (e) {}
+
+    setSurgeonStatusMsg('↪️ تم إعادة تطبيق التعديل بنجاح (Redo)!');
+  };
+
+
+
+
+// ☁️ دالة المزامنة الشاملة المباشرة مع سيرفر المنصة الأساسي (5001)
+  const syncCourseListToPlatformDB = async (lessonsToSync = lessons, silent = false) => {
+    if (!id || id === 'local_course_id') return false;
+    try {
+      const res = await axios.post(`http://127.0.0.1:5001/api/courses/${id}/sync-full-course`, {
+        lessonsList: lessonsToSync,
+        unitSummariesMap,
+        courseTitle: course?.title,
+        courseDescription: course?.description
       });
 
-      if (res.data?.success) {
-        setSurgeonStatusMsg('✅ تم حفظ الكورس بجميع وحداته ودروسه وتعديلاته في قاعدة البيانات بنجاح!');
-        alert('🎉 نجاح السيطرة: تم رفع الكورس بشكله النهائي لقاعدة البيانات!');
+      if (res.data?.success && Array.isArray(res.data.lessons)) {
+        // مسح أي كاش قديم في المتصفح حتى لا يطغى على قاعدة البيانات عند عمل Reload
+        localStorage.removeItem('cherif_active_local_course_json');
+        Object.keys(localStorage).forEach(key => {
+          if (key.startsWith(`cherif_saved_lesson_${id}_`)) {
+            localStorage.removeItem(key);
+          }
+        });
+
+        const freshDbLessons = res.data.lessons;
+        setLessons(freshDbLessons);
+        if (activeLesson) {
+          const matchedActive = freshDbLessons.find(
+            l => String(l._id) === String(activeLesson._id) || l.title === activeLesson.title
+          );
+          setActiveLesson(matchedActive || freshDbLessons[0] || null);
+        }
+        return true;
       }
-    } catch (e) {
-      console.error(e);
-      alert('❌ حدث خطأ أثناء المزامنة مع قاعدة البيانات.');
-      setSurgeonStatusMsg('');
+    } catch (err) {
+      console.error('❌ Sync 5001 Error:', err);
+      if (!silent) alert('❌ تعذر الاتصال بالسيرفر 5001 لحفظ الكورس. تأكد من تشغيل server_3.js');
+    }
+    return false;
+  };
+
+  const handleSyncFullCourseToDB = async () => {
+    setIsSyncingCourse(true);
+    setSurgeonStatusMsg('🔄 جاري حفظ ومزامنة الكورس بالكامل في قاعدة بيانات المنصة (5001)...');
+    try {
+      const ok = await syncCourseListToPlatformDB(lessons, false);
+      if (ok) {
+        setSurgeonStatusMsg('✅ تم حفظ جميع تعديلات الكورس والوحدات والدروس في قاعدة البيانات بنجاح!');
+        alert('🎉 تم حفظ الكورس بجميع وحداته ودروسه وتعديلاته نهائياً! يمكنك عمل Reload بأمان.');
+      }
     } finally {
       setIsSyncingCourse(false);
     }
   };
+
+  // 💾 تحديث قائمة الدروس في الواجهة وحفظها تلقائياً في السيرفر 5001!
+  const commitLessonsListUpdate = async (nextLessons, statusMessage = '') => {
+
+    setGlobalUndoStack(prev => [...prev, JSON.parse(JSON.stringify(lessons))]);
+   setGlobalRedoStack([]);
+
+    const seenIds = new Set();
+    const reordered = nextLessons.map((les, idx) => {
+      let safeId = les._id || `lesson_uid_${Date.now()}_${idx}`;
+      if (seenIds.has(safeId)) {
+        safeId = `${safeId}_dup_${idx}_${Math.random().toString(36).slice(2, 6)}`;
+      }
+      seenIds.add(safeId);
+      return { ...les, _id: safeId, order: idx + 1 };
+    });
+
+    setLessons(reordered);
+    if (activeLesson) {
+      const stillExists = reordered.find(l => l._id === activeLesson._id || l.title === activeLesson.title);
+      setActiveLesson(stillExists || reordered[0] || null);
+    } else if (reordered.length > 0) {
+      setActiveLesson(reordered[0]);
+    }
+
+    if (statusMessage) setSurgeonStatusMsg(`⏳ ${statusMessage} (جاري الحفظ في السيرفر...)`);
+    const synced = await syncCourseListToPlatformDB(reordered, true);
+    if (statusMessage) {
+      setSurgeonStatusMsg(synced ? `✅ ${statusMessage} (تم الحفظ النهائي في قاعدة البيانات 💾)` : `✅ ${statusMessage}`);
+    }
+  };
+
+
+
 
 
   // 🏗️ حالات جراح الوحدات (Unit Surgeon) وجراح الكورس الشامل (Course Surgeon)
@@ -1095,38 +1339,20 @@ const Classroom = () => {
     };
   };
 
-  // 💾 دالة محصنة لحفظ مصفوفة الدروس المحدثة مع ضمان عدم تكرار أي مفتاح (_id) في React
-  const commitLessonsListUpdate = (nextLessons, statusMessage = '') => {
-    const seenIds = new Set();
-    const reordered = nextLessons.map((les, idx) => {
-      let safeId = les._id || `lesson_uid_${Date.now()}_${idx}`;
-      if (seenIds.has(safeId)) {
-        safeId = `${safeId}_dup_${idx}_${Math.random().toString(36).slice(2, 6)}`;
-      }
-      seenIds.add(safeId);
-      return { ...les, _id: safeId, order: idx + 1 };
-    });
+ 
 
-    setLessons(reordered);
-    if (activeLesson) {
-      const stillExists = reordered.find(l => l._id === activeLesson._id || l.title === activeLesson.title);
-      setActiveLesson(stillExists || reordered[0] || null);
-    } else if (reordered.length > 0) {
-      setActiveLesson(reordered[0]);
-    }
-    try {
-      const fullSnapshot = buildLiveCourseJSONSnapshot(reordered);
-      localStorage.setItem('cherif_active_local_course_json', JSON.stringify(fullSnapshot));
-    } catch (e) {}
-    if (statusMessage) setSurgeonStatusMsg(`✅ ${statusMessage}`);
-  };
-
-
-  // 💾 حفظ تعديل الدرس الواحد في React State + LocalStorage + MongoDB!
-  const applyUpdatedLessonToState = async (updatedLessonObj, reportText = '') => {
+// 💾 حفظ تعديل الدرس الواحد في الواجهة وفي السيرفر 5001 فوراً!
+const applyUpdatedLessonToState = async (updatedLessonObj, reportText = '') => {
     if (!updatedLessonObj || !activeLesson) return;
 
+    // التقاط اللقطة الحالية قبل التغيير ومسح مسار المستقبل القديم
+    setGlobalUndoStack(prev => [...prev, JSON.parse(JSON.stringify(lessons))]);
+    setGlobalRedoStack([]); // 👈 هذا السطر الجديد
     setLessonUndoStack(prev => [...prev, activeLesson]);
+
+
+
+
 
     const mergedLesson = {
       ...activeLesson,
@@ -1141,30 +1367,14 @@ const Classroom = () => {
     setActiveLesson(mergedLesson);
     setLessons(nextLessons);
 
-    try {
-      localStorage.setItem(`cherif_saved_lesson_${id}_${activeLesson._id}`, JSON.stringify(mergedLesson));
-      const fullSnapshot = buildLiveCourseJSONSnapshot(nextLessons);
-      localStorage.setItem('cherif_active_local_course_json', JSON.stringify(fullSnapshot));
-    } catch (e) {}
-
-    try {
-      const token = localStorage.getItem('cherif_token');
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      await axios.put(`http://127.0.0.1:5001/api/lessons/${activeLesson._id}`, mergedLesson, { headers });
-    } catch (e) {}
-
-    try {
-      await axios.post('http://localhost:5000/api/academy2/surgeon/save-lesson-db', {
-        lessonId: activeLesson._id,
-        courseId: id,
-        updatedLesson: mergedLesson
-      });
-    } catch (e) {}
+    // حفظ مباشر في السيرفر 5001
+    await syncCourseListToPlatformDB(nextLessons, true);
 
     if (reportText) {
-      setSurgeonStatusMsg(`✅ ${reportText} (تم الحفظ تلقائياً 💾)`);
+      setSurgeonStatusMsg(`✅ ${reportText} (تم الحفظ النهائي في قاعدة البيانات 💾)`);
     }
   };
+
 
   // ============================================================================
   // 🏗️ دوال جراح الوحدة (Unit-Level Surgeon) وجراح الكورس (Course-Level Surgeon)
@@ -1383,7 +1593,7 @@ const Classroom = () => {
     }
   };
 
-  // 🤖 دالة تعديل قسم واحد فقط بالذكاء الاصطناعي
+ // 🤖 دالة تعديل قسم واحد فقط بالذكاء الاصطناعي
   const handleAiEditSingleSection = async (sectionMarkdown, userInstruction) => {
     try {
       const res = await axios.post('http://localhost:5000/api/academy2/surgeon/operate-section', {
@@ -1402,6 +1612,28 @@ const Classroom = () => {
     }
     return null;
   };
+
+ // ✨ دالة جلب الإلهام الذكي لتطوير شريحة أو عنصر واحد من الدرس
+  const handleAiInspireSingleSection = async (sectionMarkdown) => {
+    try {
+      const res = await axios.post('http://localhost:5000/api/academy2/surgeon/inspire-section', {
+        courseTitle: `${course?.parentCertTitle || ''} ${course?.title || ''}`.trim(),
+        courseOrder: course?.courseOrder || (activeCertCourseIdx + 1) || 1,
+        sectionName: activeLesson?.section || '',
+        lessonTitle: activeLesson?.title || '',
+        sectionMarkdown,
+        targetLanguage: course?.targetLanguage || activeLangConfig.nameAr
+      });
+      if (res.data?.success && res.data.data) {
+        return res.data.data;
+      }
+    } catch (e) {
+      alert('تعذر توليد الإلهام لهذه الشريحة، تأكد من إضافة مسار /inspire-section في السيرفر 5000.');
+    }
+    return null;
+  };
+
+
 
   // 📥 تصدير وتحميل ملف الـ JSON المحدث في أي وقت
   const handleExportUpdatedJSON = () => {
@@ -1768,8 +2000,8 @@ const Classroom = () => {
     recognition.start();
   };
 
-  // ============================================================================
-  // 📡 جلب البيانات الأساسية من السيرفر (Fetch Data)
+ // ============================================================================
+  // 📡 جلب البيانات الأساسية من السيرفر 5001 (المصدر الحقيقي الوحيد للبيانات)
   // ============================================================================
   useEffect(() => {
     const fetchData = async () => {
@@ -1806,6 +2038,7 @@ const Classroom = () => {
 
         if (progressRes.data) setCompletedLessons(progressRes.data.completedLessons || []);
         
+        // 🌟 الأولوية رقم 1 دائماً للدروس المحفوظة فعلياً في قاعدة بيانات السيرفر 5001
         if (lessonsRes.data.success && lessonsRes.data.lessons?.length > 0) {
           const fetchedLessons = lessonsRes.data.lessons;
           const lessonSummaries = {};
@@ -1821,16 +2054,11 @@ const Classroom = () => {
             setUnitSummariesMap(prev => ({ ...lessonSummaries, ...prev }));
           }
 
-          const restoredLessons = fetchedLessons.map(les => {
-            const savedOverride = localStorage.getItem(`cherif_saved_lesson_${id}_${les._id}`);
-            if (savedOverride) {
-              try { return { ...les, ...JSON.parse(savedOverride) }; } catch (e) {}
-            }
-            return les;
-          });
-
-          setLessons(restoredLessons);
-          setActiveLesson(restoredLessons[0]);
+          setLessons(fetchedLessons);
+          setActiveLesson(fetchedLessons[0]);
+          if (fetchedLessons[0]?.section) {
+            setOpenSections({ [fetchedLessons[0].section]: true });
+          }
         } else if (courseRes.data?.course?.sections || courseRes.data?.course?.blueprint || courseRes.data?.course?.courses) {
           hydrateFromRawCourseJSON(courseRes.data.course, 0);
         }
@@ -1848,6 +2076,8 @@ const Classroom = () => {
     fetchData();
     return () => handleStopAudio();
   }, [id]);
+
+  
 
   // ============================================================================
   // 🧠 معالجة الودجات الصوتية والبصرية للدرس
@@ -2745,16 +2975,7 @@ const Classroom = () => {
       {/* 🗂️ القائمة الجانبية (Sidebar) + جراح الكورس والوحدات للأدمين */}
       {/* ======================================================= */}
       <div className={`fixed md:static inset-y-0 right-0 z-40 w-80 bg-[#0b1120] border-l border-slate-800/70 transform ${sidebarOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'} transition-transform duration-300 flex flex-col shadow-2xl`}>
-        
-        <div className="p-4 border-b border-slate-800/60 flex justify-between items-center bg-[#0b1120] sticky top-0 z-10 gap-2">
-          <Link to={`/course/${id}`} className="text-emerald-400 hover:text-emerald-300 flex items-center gap-1.5 font-semibold text-xs transition-colors">
-            <ArrowRight size={15} /> العودة للكورس
-          </Link>
-
-          {canEditCourse && (
-            <>
-
-            <div className="p-4 border-b border-slate-800/60 flex justify-between items-center bg-[#0b1120] sticky top-0 z-10 gap-2">
+<div className="p-4 border-b border-slate-800/60 flex justify-between items-center bg-[#0b1120] sticky top-0 z-10 gap-2">
           <Link to={`/course/${id}`} className="text-emerald-400 hover:text-emerald-300 flex items-center gap-1.5 font-semibold text-xs transition-colors shrink-0">
             <ArrowRight size={15} /> العودة
           </Link>
@@ -2772,18 +2993,43 @@ const Classroom = () => {
                 type="button"
                 onClick={() => jsonInputRef.current?.click()}
                 className="bg-indigo-500/15 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/30 px-2 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all"
-                title="فتح ملف JSON للكورس أو الشهادة الكاملة مباشرة"
+                title="فتح ملف JSON"
               >
                 <Upload size={12} /> JSON
               </button>
 
-              {/* 🟢 الزر السحري الجديد لحفظ كل شيء في قاعدة البيانات */}
+{/* ↩️ زر التراجع العالمي (Undo) */}
+              {globalUndoStack.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleGlobalUndo}
+                  className="bg-amber-500/15 hover:bg-amber-500 text-amber-400 hover:text-slate-950 px-2 py-1.5 rounded-lg text-[10px] font-black flex items-center gap-1 transition-all border border-amber-500/30"
+                  title="تراجع عن آخر تعديل (Undo)"
+                >
+                  <RotateCcw size={12} /> تراجع ({globalUndoStack.length})
+                </button>
+              )}
+
+              {/* ↪️ زر الإعادة العالمي (Redo) */}
+              {globalRedoStack.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleGlobalRedo}
+                  className="bg-sky-500/15 hover:bg-sky-500 text-sky-400 hover:text-slate-950 px-2 py-1.5 rounded-lg text-[10px] font-black flex items-center gap-1 transition-all border border-sky-500/30 shadow-[0_0_8px_rgba(14,165,233,0.3)]"
+                  title="إعادة ما تم التراجع عنه (Redo)"
+                >
+                  <RotateCw size={12} /> استعادة ({globalRedoStack.length})
+                </button>
+              )}
+
+              {/* 🟢 زر الحفظ الشامل */}
               <button
                 type="button"
                 disabled={isSyncingCourse}
                 onClick={handleSyncFullCourseToDB}
+
                 className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-3 py-1.5 rounded-lg text-[10px] font-black flex items-center gap-1 transition-all shadow-[0_0_10px_rgba(16,185,129,0.3)] disabled:opacity-50"
-                title="مزامنة جميع التعديلات والحذف وإضافات الـ AI إلى قاعدة البيانات فوراً"
+                title="مزامنة جميع التعديلات في قاعدة البيانات فوراً"
               >
                 <RefreshCw size={12} className={isSyncingCourse ? 'animate-spin' : ''} />
                 {isSyncingCourse ? 'جاري الحفظ...' : 'حفظ التعديلات 💾'}
@@ -2794,27 +3040,7 @@ const Classroom = () => {
           <button onClick={() => setSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-white transition-colors shrink-0"><X size={20} /></button>
         </div>
 
-        
-              <input
-                type="file"
-                accept=".json"
-                ref={jsonInputRef}
-                onChange={handleImportLocalJSONFile}
-                className="hidden"
-              />
-              <button
-                type="button"
-                onClick={() => jsonInputRef.current?.click()}
-                className="bg-indigo-500/15 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/30 px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all"
-                title="فتح ملف JSON للكورس أو الشهادة الكاملة مباشرة"
-              >
-                <Upload size={12} /> فتح JSON
-              </button>
-            </>
-          )}
 
-          <button onClick={() => setSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-white transition-colors"><X size={20} /></button>
-        </div>
 
         {certificateCoursesList.length > 1 && (
           <div className="p-3.5 bg-indigo-950/30 border-b border-indigo-500/30 space-y-2">
@@ -3893,6 +4119,7 @@ const Classroom = () => {
                           applyUpdatedLessonToState({ ...activeLesson, content: newMarkdownContent }, reportMsg)
                         }
                         onAiEditBlock={handleAiEditSingleSection}
+                        onAiInspireBlock={handleAiInspireSingleSection}
                         markdownComponents={{
                           h1({children}) {
                             return <h2 className="heading-font text-xl md:text-[26px] font-bold text-white mt-6 mb-5 leading-[1.4]">{children}</h2>

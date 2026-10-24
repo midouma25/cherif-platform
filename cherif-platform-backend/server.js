@@ -333,7 +333,10 @@ const courseSchema = new mongoose.Schema({
     instructor: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     isPublished: { type: Boolean, default: false },
     created_at: { type: Date, default: Date.now }
-});
+}, 
+{ strict: false }); // 👈 السطر السحري: إيقاف الصرامة للسماح بقراءة الهياكل المعمارية الضخمة (Blueprint & Sections)!
+
+
 
 const Course = mongoose.model('Course', courseSchema);
 
@@ -962,6 +965,123 @@ app.post('/api/courses/auto-import', async (req, res) => {
         res.status(500).json({ error: 'حدث خطأ داخلي أثناء استيراد الكورس: ' + error.message });
     }
 });
+
+
+
+// ==========================================
+// 💾 مسار المزامنة الشاملة للكورس والدروس والوحدات في السيرفر الرئيسي (5001)
+// ==========================================
+app.post('/api/courses/:courseId/sync-full-course', async (req, res) => {
+    const { courseId } = req.params;
+    const { lessonsList, unitSummariesMap, courseTitle, courseDescription } = req.body;
+
+    if (!courseId || !Array.isArray(lessonsList)) {
+        return res.status(400).json({ success: false, error: 'بيانات المزامنة غير مكتملة.' });
+    }
+
+    try {
+        console.log(`\n☁️ [Master Sync 5001] جاري حفظ ومزامنة الكورس (${courseId}) بعدد (${lessonsList.length}) درساً...`);
+
+        // 1. استخراج المعرفات الحقيقية الموجودة حالياً في الواجهة
+        const incomingValidIds = lessonsList
+            .filter(l => l._id && mongoose.Types.ObjectId.isValid(String(l._id)))
+            .map(l => new mongoose.Types.ObjectId(String(l._id)));
+
+        // 2. حذف أي درس قديم في قاعدة البيانات تم حذفه من الواجهة
+        const deleteResult = await Lesson.deleteMany({
+            courseId: new mongoose.Types.ObjectId(courseId),
+            _id: { $nin: incomingValidIds }
+        });
+        console.log(`   🗑️ تم تنظيف ${deleteResult.deletedCount} دروس محذوفة.`);
+
+        let updatedCount = 0;
+        let insertedCount = 0;
+
+        // 3. تحديث الدروس الموجودة وإدراج الدروس المضافة حديثاً بالترتيب الدقيق
+        for (let i = 0; i < lessonsList.length; i++) {
+            const les = lessonsList[i];
+            const cleanPayload = sanitizeLessonData(
+                les,
+                new mongoose.Types.ObjectId(courseId),
+                les.section || 'الوحدة 1: الأساسيات',
+                i + 1
+            );
+
+            // الحفاظ على خصائص الودجات والتعديلات الجراحية الخاصة بالدرس
+            const fullLessonFields = {
+                ...cleanPayload,
+                order: i + 1,
+                sectionOrder: les.sectionOrder || 1,
+                hideMistakesWidget: Boolean(les.hideMistakesWidget),
+                hideLegoWidget: Boolean(les.hideLegoWidget),
+                hideLadderWidget: Boolean(les.hideLadderWidget),
+                hideSpeakClassWidget: Boolean(les.hideSpeakClassWidget),
+                hideCodingWidget: Boolean(les.hideCodingWidget),
+                hideQuestWidget: Boolean(les.hideQuestWidget),
+                customMistakeRows: les.customMistakeRows || null,
+                customLegoEquations: les.customLegoEquations || null,
+                customLadderSteps: les.customLadderSteps || null,
+                customVoiceTitle: les.customVoiceTitle || null,
+                updatedAt: new Date()
+            };
+
+            const isValidObjId = les._id && mongoose.Types.ObjectId.isValid(String(les._id));
+            if (isValidObjId) {
+                const existing = await Lesson.findByIdAndUpdate(
+                    les._id,
+                    { $set: fullLessonFields },
+                    { new: true }
+                );
+                if (existing) {
+                    updatedCount++;
+                } else {
+                    const created = new Lesson(fullLessonFields);
+                    await created.save();
+                    insertedCount++;
+                }
+            } else {
+                const created = new Lesson(fullLessonFields);
+                await created.save();
+                insertedCount++;
+            }
+        }
+
+        // 4. تحديث بيانات الكورس وملخصات الوحدات في وثيقة Course
+        const courseDoc = await Course.findById(courseId);
+        if (courseDoc) {
+            if (courseTitle) courseDoc.title = cleanCourseTitlePrefix(courseTitle);
+            if (courseDescription) courseDoc.description = courseDescription;
+            if (unitSummariesMap && typeof unitSummariesMap === 'object') {
+                courseDoc.certificateMeta = {
+                    ...(courseDoc.certificateMeta || {}),
+                    unitSummariesMap
+                };
+                courseDoc.markModified('certificateMeta');
+            }
+            // إزالة أي نسخ قديمة مكررة داخل وثيقة الكورس لتكون مجموعة Lesson هي المرجع الوحيد
+            courseDoc.set('courses', undefined, { strict: false });
+            courseDoc.set('sections', undefined, { strict: false });
+            courseDoc.set('blueprint', undefined, { strict: false });
+            await courseDoc.save();
+        }
+
+        // 5. جلب الدروس المحدثة بمعرفاتها الحقيقية لإرجاعها للواجهة فوراً
+        const freshLessons = await Lesson.find({ courseId: new mongoose.Types.ObjectId(courseId) }).sort({ order: 1 });
+
+        console.log(`✅ [Master Sync 5001] اكتمل الحفظ بنجاح: (تحديث ${updatedCount}) | (إنشاء ${insertedCount}).`);
+        res.json({
+            success: true,
+            updatedCount,
+            insertedCount,
+            lessons: freshLessons,
+            message: 'تم حفظ جميع التعديلات في قاعدة بيانات المنصة بنجاح!'
+        });
+    } catch (error) {
+        console.error('❌ خطأ في المزامنة الشاملة (5001):', error);
+        res.status(500).json({ success: false, error: 'فشل في حفظ التعديلات في قاعدة البيانات.' });
+    }
+});
+
 
 // ==========================================
 // تشغيل السيرفر
