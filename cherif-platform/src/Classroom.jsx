@@ -75,8 +75,9 @@ const resolveLanguageConfig = (contextStr = '', sampleText = '') => {
   return { code: 'en-US', nameAr: 'الإنجليزية', nameEn: 'English', flag: '🇬🇧' };
 };
 
+
 // ============================================================================
-// 🧹 0.5 منقي النصوص التلقائي الشامل
+// 🧹 0.5 محرك التطهير، ترتيب اللغات (BiDi Fixer)، ومنع التكرار التلقائي الشامل
 // ============================================================================
 const sanitizeLessonMarkdown = (raw = '', stripRawPromptSection = false) => {
   if (!raw) return '';
@@ -95,11 +96,86 @@ const sanitizeLessonMarkdown = (raw = '', stripRawPromptSection = false) => {
     .replace(/---;/g, '---')
     .replace(/🔊\s*IPA:\s*\/([\u0600-\u06FF\s]+)\//g, '🔊 النطق: /$1/');
 
+  // 🔗 1. علاج جذري لمشكلة تبعثر الكلمات الأجنبية في الأسطر العربية (كما في الصورة):
+  // يدمج الكلمات الأجنبية المتجاورة المقطعة بـ backticks مثل: `Oui` , `c'est un` `stylo` -> `Oui, c'est un stylo`
+  for (let pass = 0; pass < 4; pass++) {
+    cleaned = cleaned.replace(
+      /`([^\u0600-\u06FF`\n]{1,45})`\s*([,.;:?!'’+-]?)\s*`([^\u0600-\u06FF`\n]{1,45})`/g,
+      (_, part1, sep, part2) => {
+        const cleanSep = sep ? `${sep} ` : ' ';
+        return `\`${part1.trim()}${cleanSep}${part2.trim()}\``.replace(/\s+/g, ' ');
+      }
+    );
+  }
+
+  // 🎯 2. ترتيب صيغة [Liaison: ...] أو المعادلات المختلطة لكي لا تنكسر بين السطور
+  cleaned = cleaned.replace(
+    /\[\s*Liaison\s*:\s*`?([^`\]=]+)`?\s*\+\s*`?([^`\]=]+)`?\s*=\s*([^\]]+)\]/gi,
+    '🎧 **[الربط الصوتي Liaison:** `$1 + $2` ⬅️ **$3]**'
+  );
+
   if (stripRawPromptSection) {
     cleaned = cleaned.split(/###\s*🎙️/)[0].trim();
   }
   return cleaned;
 };
+
+// 🧼 دالة الترتيب اللغوي الفوري وحذف الأسطر والعناصر المكررة داخل أي نص Markdown (للشريحة أو الدرس)
+const formatAndDeduplicateMarkdown = (rawMarkdown = '') => {
+  if (!rawMarkdown) return '';
+  const sanitized = sanitizeLessonMarkdown(rawMarkdown, false);
+
+  // تقسيم إلى أقسام فرعية لحذف الأقسام المكررة (مثل تكرار محادثة أو تكرار رادار الأخطاء)
+  const rawBlocks = sanitized.split(/(?=\n###\s+|\n##\s+)/g).map(b => b.trim()).filter(Boolean);
+  const uniqueBlocks = [];
+  const seenBlockSignatures = new Set();
+
+  rawBlocks.forEach(block => {
+    const lines = block.split('\n');
+    const heading = (lines[0] || '').replace(/^[#*-\s]+/, '').trim().toLowerCase();
+    // تنظيف الأسطر الداخلية من التكرار الحرفي
+    const dedupedLines = [];
+    const seenLines = new Set();
+
+    lines.forEach(line => {
+      const trimmed = line.trim();
+      // إصلاح أسطر المحادثات مثل "• Marie: `Oui, c'est un stylo.` (وي...)" لتكون مرتبة تماماً
+      let formattedLine = line.replace(
+        /^(\s*[-*•]?\s*)\*\*?([A-Za-z\u00C0-\u024F\u0600-\u06FF\s]{2,18})\*\*?\s*:\s*/u,
+        '$1🗣️ **$2:** '
+      );
+
+      const lineNormalized = trimmed
+        .replace(/[^\p{L}\p{N}]/gu, '')
+        .toLowerCase();
+
+      // السماح بفواصل الجداول والأسطر الفارغة، ومنع تكرار نفس الجملة أو المثال مرتين في نفس القسم
+      if (
+        !trimmed ||
+        trimmed.startsWith('---') ||
+        trimmed.startsWith('| ---') ||
+        trimmed.startsWith('|---') ||
+        lineNormalized.length < 6 ||
+        !seenLines.has(lineNormalized)
+      ) {
+        if (lineNormalized.length >= 6) seenLines.add(lineNormalized);
+        dedupedLines.push(formattedLine);
+      }
+    });
+
+    const rebuiltBlock = dedupedLines.join('\n').trim();
+    const blockBodyNormalized = rebuiltBlock.replace(/[^\p{L}\p{N}]/gu, '').toLowerCase().slice(0, 180);
+    const sig = `${heading}__${blockBodyNormalized.slice(0, 80)}`;
+
+    if (!seenBlockSignatures.has(sig)) {
+      seenBlockSignatures.add(sig);
+      uniqueBlocks.push(rebuiltBlock);
+    }
+  });
+
+  return uniqueBlocks.join('\n\n');
+};
+
 
 // 🎨 كاشف الجنس النحوي التلقائي لتلوين الكلمات المذكرة (🔵) والمؤنثة (🔴)
 const detectGrammaticalGenderBadge = (text = '') => {
@@ -280,6 +356,28 @@ const cleanCourseTitleText = (title = '') => {
     .replace(/^((?:الكراش كورس|كراش كورس|الكورس)\s*\d+)\s*:\s*(?:الكراش كورس|كراش كورس|الكورس)\s*\d+\s*[-:]?\s*/i, '$1: ')
     .trim();
 };
+
+
+// 🔍 مستخرج النصوص العميق لضمان تفاعل الواجهة مع التمارين والمحادثات الصوتية حتى لو كانت داخل تنسيقات متداخلة
+const extractDeepTextFromReactNode = (node) => {
+  if (node === null || node === undefined || typeof node === 'boolean') return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(extractDeepTextFromReactNode).join('');
+  if (node?.props?.children !== undefined) return extractDeepTextFromReactNode(node.props.children);
+  return '';
+};
+
+// 🗣️ مستخرج الجملة الأجنبية الصافية من أي سطر حواري أو مثال لتشغيلها صوتياً
+const extractForeignSpeechFromLine = (text = '') => {
+  if (!text) return '';
+  const withoutFillBlank = text.replace(/\[\[([^\]|]+)(?:\|[^\]]*)?\]\]/g, '$1');
+  const withoutArabicParens = withoutFillBlank.replace(/\([^)]*[\u0600-\u06FF]+[^)]*\)/g, '');
+  const withoutSpeakerPrefix = withoutArabicParens.replace(/^[-*•\d.)\s]*[^:\n]{1,25}:\s*/, '');
+  const foreignChunks = withoutSpeakerPrefix.match(/[A-Za-z\u00C0-\u024F\u3040-\u30ff\u4e00-\u9faf][A-Za-z\u00C0-\u024F\u3040-\u30ff\u4e00-\u9faf\s,.?!'’¿¡"-]{2,}/g);
+  return foreignChunks ? foreignChunks.join(' ').trim() : '';
+};
+
+
 
 // ============================================================================
 // 🧩 مكوّن "املأ الفراغ التفاعلي" في منتصف الدرس (Mid-Lesson Interactive Fill-in-the-Blank)
@@ -735,6 +833,14 @@ const EditableLessonBlocks = ({
     onSaveFullMarkdown(nextBlocks.join('\n\n'), `تم حذف القسم (${idx + 1}) من الدرس!`);
   };
 
+  // 🧼 ترتيب الشريحة وتنسيق اللغات وحذف التكرار (فوري + خيار AI)
+  const handleQuickOrganizeBlock = (idx) => {
+    const cleanedBlock = formatAndDeduplicateMarkdown(blocks[idx]);
+    const nextBlocks = [...blocks];
+    nextBlocks[idx] = cleanedBlock;
+    onSaveFullMarkdown(nextBlocks.join('\n\n'), `تم ترتيب اللغات وتنسيق القسم (${idx + 1}) وحذف التكرارات فوراً!`);
+  };
+
   const handleRunAiOnBlock = async (idx, customPrompt = null) => {
     const instruction = customPrompt || aiBlockInstruction;
     if (!instruction || !instruction.trim()) return;
@@ -835,6 +941,25 @@ const EditableLessonBlocks = ({
                 >
                   🧩 + املأ الفراغ هنا
                 </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleQuickOrganizeBlock(bIdx)}
+                  className="bg-teal-500/15 hover:bg-teal-500 text-teal-300 hover:text-slate-950 border border-teal-500/30 px-2.5 py-1 rounded-lg text-[11px] font-black transition-all flex items-center gap-1"
+                  title="ترتيب تداخل اللغات (العربية/الأجنبية) ودمج الكلمات المبعثرة وحذف أي تكرار في هذه الشريحة فوراً"
+                >
+                  ✨ ترتيب الشريحة
+                </button>
+                <button
+                  type="button"
+                  disabled={isThisBlockLoading || isOperating}
+                  onClick={() => handleRunAiOnBlock(bIdx, 'أعد ترتيب وتنسيق هذا القسم بالكامل ليكون مريحاً للعين ومتوافقاً مع اتجاه اللغات، وادمج الكلمات الأجنبية المتقطعة في جمل متكاملة، واحذف أي جمل أو عناصر مكررة.')}
+                  className="bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/30 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all"
+                  title="إعادة هيكلة وترتيب هذه الشريحة بالذكاء الاصطناعي"
+                >
+                  🧹 ترتيب بالـ AI
+                </button>
+
                 <button
                   type="button"
                   onClick={() => handleDeleteBlock(bIdx)}
@@ -907,36 +1032,43 @@ const EditableLessonBlocks = ({
                       )}
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+<div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {(currentInspiration.inspirations || []).map((item, iIdx) => (
                         <div
                           key={item.id || iIdx}
-                          className="bg-slate-950/90 border border-slate-800 hover:border-amber-500/50 rounded-xl p-3 flex flex-col justify-between gap-2.5 transition-all"
+                          className="bg-slate-950/95 border border-slate-800 hover:border-amber-500/60 rounded-xl p-3.5 flex flex-col justify-between gap-3 transition-all shadow-md"
                         >
-                          <div>
-                            <span className="text-[10px] font-black bg-amber-500/15 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full">
-                              {item.badge || '✨ فكرة تطوير'}
-                            </span>
-                            <h5 className="text-xs font-bold text-white mt-1.5">{item.title}</h5>
-                            <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">{item.why}</p>
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <span className="text-[10px] font-black bg-amber-500/15 text-amber-300 border border-amber-500/30 px-2.5 py-0.5 rounded-full">
+                                {item.badge || '✨ ترقية ذكية للشريحة'}
+                              </span>
+                              {item.whatItAdds && (
+                                <span className="text-[10px] font-bold bg-emerald-500/10 text-emerald-300 border border-emerald-500/25 px-2 py-0.5 rounded-md">
+                                  ➕ {item.whatItAdds}
+                                </span>
+                              )}
+                            </div>
+                            <h5 className="text-xs sm:text-[13px] font-black text-white pt-0.5">{item.title}</h5>
+                            <p className="text-[11px] text-slate-300 leading-relaxed">{item.why}</p>
                           </div>
 
-                          <div className="flex items-center gap-1.5 pt-1">
+                          <div className="flex items-center gap-1.5 pt-2 border-t border-slate-800/80">
                             <button
                               type="button"
                               onClick={() => setAiBlockInstruction(item.command)}
-                              className="flex-1 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-[10px] font-bold py-1.5 px-2 rounded-lg transition-all"
+                              className="flex-1 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-[10px] font-bold py-2 px-2.5 rounded-lg transition-all"
                               title="ضع هذا الأمر في الخانة لتعديله قبل التنفيذ"
                             >
-                              ✍️ نسخ للخانة
+                              ✍️ معاينة وتعديل الأمر
                             </button>
                             <button
                               type="button"
                               disabled={isThisBlockLoading}
                               onClick={() => handleRunAiOnBlock(bIdx, item.command)}
-                              className="flex-1 bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/40 text-[10px] font-black py-1.5 px-2 rounded-lg transition-all"
+                              className="flex-1 bg-gradient-to-l from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 text-[10px] font-black py-2 px-2.5 rounded-lg transition-all shadow"
                             >
-                              ⚡ طبّق فوراً
+                              ⚡ طبّق على الشريحة فوراً
                             </button>
                           </div>
                         </div>
@@ -1226,14 +1358,20 @@ const Classroom = () => {
 
 
 
-  // 🏗️ حالات جراح الوحدات (Unit Surgeon) وجراح الكورس الشامل (Course Surgeon)
+ // 🏗️ حالات جراح الوحدات (Unit Surgeon Modal) وجراح الكورس الشامل (Course Surgeon Modal)
   const [activeUnitSurgeon, setActiveUnitSurgeon] = useState(null);
   const [unitSurgeonCommand, setUnitSurgeonCommand] = useState('');
   const [newLessonTitleInUnit, setNewLessonTitleInUnit] = useState('');
+  const [generateNewLessonWithAI, setGenerateNewLessonWithAI] = useState(true);
   const [editingUnitNameValue, setEditingUnitNameValue] = useState('');
+  const [unitInspirationData, setUnitInspirationData] = useState(null);
+  const [isInspiringUnit, setIsInspiringUnit] = useState(false);
+
   const [isCourseSurgeonOpen, setIsCourseSurgeonOpen] = useState(false);
   const [courseSurgeonCommand, setCourseSurgeonCommand] = useState('');
   const [newUnitNameInput, setNewUnitNameInput] = useState('');
+  const [courseInspirationData, setCourseInspirationData] = useState(null);
+  const [isInspiringCourse, setIsInspiringCourse] = useState(false);
 
   const shuffleBossQuestions = (quizArray) => {
     return [...quizArray].sort(() => Math.random() - 0.5);
@@ -1281,6 +1419,32 @@ const Classroom = () => {
     const fullContext = `${course?.targetLanguage || ''} ${course?.speechLang || ''} ${course?.parentCertTitle || ''} ${course?.title || ''} ${course?.description || ''} ${activeLesson?.section || ''} ${activeLesson?.title || ''}`;
     return resolveLanguageConfig(fullContext, activeLesson?.codeSnippet || '');
   }, [course, activeLesson]);
+
+  // 🔗 استخراج خريطة السياق الهرمي للدرس الحالي (الدرس السابق واللاحق ودروس الوحدة)
+  const hierarchyContext = useMemo(() => {
+    const allUnitsNames = [...new Set(lessons.map(l => l.section || 'الوحدة 1'))];
+    const currentUnitName = activeLesson?.section || allUnitsNames[0] || 'الوحدة 1';
+    const currentUnitIdx = allUnitsNames.indexOf(currentUnitName);
+    const prevUnitName = currentUnitIdx > 0 ? allUnitsNames[currentUnitIdx - 1] : '';
+    const nextUnitName = currentUnitIdx >= 0 && currentUnitIdx < allUnitsNames.length - 1 ? allUnitsNames[currentUnitIdx + 1] : '';
+
+    const unitLessons = lessons.filter(l => l.section === currentUnitName);
+    const unitLessonsTitles = unitLessons.map(l => l.title);
+    const activeIdxInUnit = unitLessons.findIndex(l => l._id === activeLesson?._id);
+    const prevLessonTitle = activeIdxInUnit > 0 ? unitLessons[activeIdxInUnit - 1].title : '';
+    const nextLessonTitle = activeIdxInUnit >= 0 && activeIdxInUnit < unitLessons.length - 1 ? unitLessons[activeIdxInUnit + 1].title : '';
+
+    return {
+      allUnitsNames,
+      currentUnitName,
+      prevUnitName,
+      nextUnitName,
+      unitLessons,
+      unitLessonsTitles,
+      prevLessonTitle,
+      nextLessonTitle
+    };
+  }, [lessons, activeLesson]);
 
   // 🔄 بناء كائن JSON كامل للكورس أو الشهادة في أي وقت
   const buildLiveCourseJSONSnapshot = (updatedLessonsList = lessons) => {
@@ -1339,20 +1503,13 @@ const Classroom = () => {
     };
   };
 
- 
-
-// 💾 حفظ تعديل الدرس الواحد في الواجهة وفي السيرفر 5001 فوراً!
-const applyUpdatedLessonToState = async (updatedLessonObj, reportText = '') => {
+  // 💾 حفظ تعديل الدرس الواحد في الواجهة وفي السيرفر 5001 فوراً!
+  const applyUpdatedLessonToState = async (updatedLessonObj, reportText = '') => {
     if (!updatedLessonObj || !activeLesson) return;
 
-    // التقاط اللقطة الحالية قبل التغيير ومسح مسار المستقبل القديم
     setGlobalUndoStack(prev => [...prev, JSON.parse(JSON.stringify(lessons))]);
-    setGlobalRedoStack([]); // 👈 هذا السطر الجديد
+    setGlobalRedoStack([]);
     setLessonUndoStack(prev => [...prev, activeLesson]);
-
-
-
-
 
     const mergedLesson = {
       ...activeLesson,
@@ -1367,275 +1524,13 @@ const applyUpdatedLessonToState = async (updatedLessonObj, reportText = '') => {
     setActiveLesson(mergedLesson);
     setLessons(nextLessons);
 
-    // حفظ مباشر في السيرفر 5001
     await syncCourseListToPlatformDB(nextLessons, true);
 
     if (reportText) {
       setSurgeonStatusMsg(`✅ ${reportText} (تم الحفظ النهائي في قاعدة البيانات 💾)`);
     }
   };
-
-
-  // ============================================================================
-  // 🏗️ دوال جراح الوحدة (Unit-Level Surgeon) وجراح الكورس (Course-Level Surgeon)
-  // ============================================================================
-
-  // 1. إعادة تسمية الوحدة يدوياً
-  const handleRenameUnit = (oldSectionName, newSectionName) => {
-    const trimmed = (newSectionName || '').trim();
-    if (!trimmed || trimmed === oldSectionName) return;
-    const nextLessons = lessons.map(l => (l.section === oldSectionName ? { ...l, section: trimmed } : l));
-    if (unitSummariesMap[oldSectionName]) {
-      setUnitSummariesMap(prev => {
-        const copy = { ...prev, [trimmed]: prev[oldSectionName] };
-        delete copy[oldSectionName];
-        return copy;
-      });
-    }
-    setOpenSections(prev => ({ ...prev, [trimmed]: true }));
-    setActiveUnitSurgeon(null);
-    commitLessonsListUpdate(nextLessons, `تم تغيير اسم الوحدة إلى (${trimmed}) وحفظها!`);
-  };
-
-  // 2. إضافة درس جديد داخل وحدة محددة
-  const handleAddLessonToUnit = async (sectionName, customTitle = '') => {
-    const titleToUse = (customTitle || newLessonTitleInUnit || '').trim() || `درس تطبيقي جديد في ${sectionName}`;
-    const newLessonObj = {
-      _id: `lesson_custom_${Date.now()}`,
-      title: titleToUse,
-      description: `درس مضاف عبر جراح الوحدة (${sectionName})`,
-      type: 'video',
-      lessonCategory: 'language_mastery',
-      section: sectionName,
-      content: `### 🎯 1. هدف الدرس السريع\nمرحباً بك في درس **${titleToUse}** ضمن (${sectionName}). يمكنك تعديل هذا القسم يدوياً أو بالذكاء الاصطناعي فوراً!\n\n### 🧩 2. تمرين املأ الفراغ التفاعلي\n- اختر الكلمة الصحيحة لإتمام الجملة: [[الصواب | خيار 1 | خيار 2]]`,
-      codeSnippet: '',
-      codeExplanation: '',
-      codingPractice: {
-        hasPractice: true,
-        taskQuestion: `اكتب جملة تطبيقية حول موضوع (${titleToUse}):`,
-        starterCode: '',
-        hints: ['تذكر القاعدة الأساسية للوحدة.', 'ابدأ بفاعل ثم فعل واضح.'],
-        solutionCode: 'Good job!'
-      },
-      dailyQuest: {
-        question: `ما هي الفكرة الرئيسية في درس (${titleToUse})؟`,
-        options: ['التطبيق العملي للقاعدة', 'تجاهل القاعدة', 'حفظ عشوائي', 'لا شيء مما سبق'],
-        correctAnswerIndex: 0,
-        explanation: 'التطبيق العملي المنهجي هو أساس إتقان المهارة.',
-        bonusExp: 50
-      },
-      bossQuiz: []
-    };
-
-    // إدراج الدرس في نهاية هذه الوحدة تحديداً
-    const unitLessonIndices = lessons.map((l, i) => (l.section === sectionName ? i : -1)).filter(i => i !== -1);
-    const insertAt = unitLessonIndices.length > 0 ? unitLessonIndices[unitLessonIndices.length - 1] + 1 : lessons.length;
-    const nextLessons = [...lessons.slice(0, insertAt), newLessonObj, ...lessons.slice(insertAt)];
-
-    setNewLessonTitleInUnit('');
-    setActiveUnitSurgeon(null);
-    commitLessonsListUpdate(nextLessons, `تمت إضافة الدرس (${titleToUse}) إلى (${sectionName})!`);
-    setActiveLesson(newLessonObj);
-  };
-
-  // 3. حذف وحدة كاملة
-  const handleDeleteUnit = (sectionName) => {
-    if (!window.confirm(`هل أنت متأكد من حذف الوحدة (${sectionName}) بجميع دروسها؟`)) return;
-    const nextLessons = lessons.filter(l => l.section !== sectionName);
-    setActiveUnitSurgeon(null);
-    commitLessonsListUpdate(nextLessons, `تم حذف الوحدة (${sectionName}) بنجاح!`);
-  };
-
-  // 4. جراحة الوحدة بالذكاء الاصطناعي (Unit AI Surgeon)
-  const handleExecuteUnitSurgeon = async (sectionName, sectionLessons, customCmd = null) => {
-    const cmd = (customCmd || unitSurgeonCommand || '').trim();
-    if (!cmd) return;
-    setIsOperatingLesson(true);
-    setSurgeonStatusMsg(`🏗️ جاري تنفيذ الجراحة الذكية على الوحدة (${sectionName})...`);
-    try {
-      const res = await axios.post('http://localhost:5000/api/academy2/surgeon/operate-unit', {
-        courseTitle: `${course?.parentCertTitle || ''} ${course?.title || ''}`.trim(),
-        sectionName,
-        currentLessons: sectionLessons,
-        userCommand: cmd
-      });
-
-      if (res.data?.success && Array.isArray(res.data.data?.updatedLessonsBlueprint)) {
-        const blueprint = res.data.data.updatedLessonsBlueprint;
-        const rebuiltUnitLessons = blueprint.map((item, idx) => {
-          const existing = sectionLessons.find(
-            old => old.title.trim().toLowerCase() === (item.title || '').trim().toLowerCase()
-          ) || sectionLessons[idx];
-
-          if (existing && item.title === existing.title) {
-            return { ...existing, description: item.description || existing.description };
-          }
-          return {
-            ...(existing || {}),
-            _id: existing?._id || `lesson_unit_ai_${Date.now()}_${idx}`,
-            title: item.title || `درس ${idx + 1}`,
-            description: item.description || '',
-            type: item.type || existing?.type || 'video',
-            section: sectionName,
-            content: existing?.content || `### 🎯 1. مقدمة الدرس: ${item.title}\n${item.description || 'درس جديد تمت إضافته عبر جراح الوحدة الذكي.'}`
-          };
-        });
-
-        // استبدال دروس هذه الوحدة بالدروس المهيكلة الجديدة مع الحفاظ على باقي الوحدات
-        const finalLessons = [];
-        let unitInserted = false;
-        lessons.forEach(l => {
-          if (l.section === sectionName) {
-            if (!unitInserted) {
-              finalLessons.push(...rebuiltUnitLessons);
-              unitInserted = true;
-            }
-          } else {
-            finalLessons.push(l);
-          }
-        });
-        if (!unitInserted) finalLessons.push(...rebuiltUnitLessons);
-
-        commitLessonsListUpdate(finalLessons, res.data.data.surgeonReport || `تم تحديث هيكل الوحدة (${sectionName}) بالذكاء الاصطناعي!`);
-        setUnitSurgeonCommand('');
-        setActiveUnitSurgeon(null);
-      }
-    } catch (e) {
-      alert('تعذر الاتصال بمسار جراحة الوحدة في السيرفر، تأكد من إضافة مسار /operate-unit.');
-    } finally {
-      setIsOperatingLesson(false);
-    }
-  };
-
-  // 5. إضافة وحدة جديدة بالكامل للكورس (Manual Course Unit Addition)
-  const handleAddNewUnitToCourse = () => {
-    const unitTitle = (newUnitNameInput || '').trim();
-    if (!unitTitle) return alert('اكتب اسم الوحدة الجديدة أولاً!');
-    const starterLesson = {
-      _id: `lesson_new_unit_${Date.now()}`,
-      title: `الدرس 1: مدخل إلى ${unitTitle}`,
-      description: `الدرس الافتتاحي في ${unitTitle}`,
-      type: 'video',
-      lessonCategory: 'language_mastery',
-      section: unitTitle,
-      content: `### 🎯 1. مرحباً بك في ${unitTitle}\nتم إنشاء هذه الوحدة الجديدة بنجاح! يمكنك الآن استخدام **المُشرط الذكي** لتوليد أو تعديل محتوى هذا الدرس.`,
-      codeSnippet: '',
-      codeExplanation: ''
-    };
-    const nextLessons = [...lessons, starterLesson];
-    setNewUnitNameInput('');
-    setOpenSections(prev => ({ ...prev, [unitTitle]: true }));
-    commitLessonsListUpdate(nextLessons, `تم إنشاء الوحدة الجديدة (${unitTitle}) وإضافتها للكورس!`);
-    setActiveLesson(starterLesson);
-  };
-
-  // 6. جراحة الكراش كورس بالكامل بالذكاء الاصطناعي (Course-Level AI Surgeon)
-  const handleExecuteCourseSurgeon = async (customCmd = null) => {
-    const cmd = (customCmd || courseSurgeonCommand || '').trim();
-    if (!cmd) return;
-    setIsOperatingLesson(true);
-    setSurgeonStatusMsg('🌍 جاري إعادة هيكلة الكراش كورس بالكامل عبر الذكاء الاصطناعي...');
-    try {
-      const currentBlueprint = Object.values(
-        lessons.reduce((acc, l) => {
-          const sName = l.section || 'الوحدة 1';
-          if (!acc[sName]) acc[sName] = { sectionName: sName, lessons: [] };
-          acc[sName].lessons.push({ title: l.title, type: l.type, description: l.description });
-          return acc;
-        }, {})
-      );
-
-      const res = await axios.post('http://localhost:5000/api/academy2/surgeon/operate-course-blueprint', {
-        courseTitle: `${course?.parentCertTitle || ''} ${course?.title || ''}`.trim(),
-        currentBlueprint,
-        userCommand: cmd
-      });
-
-      if (res.data?.success && Array.isArray(res.data.data?.updatedBlueprint)) {
-        const nextFlatLessons = [];
-        res.data.data.updatedBlueprint.forEach((sec, sIdx) => {
-          const secName = sec.sectionName || `الوحدة ${sIdx + 1}`;
-          (sec.lessons || []).forEach((lesItem, lIdx) => {
-            const matchedOld = lessons.find(
-              old => old.title.trim().toLowerCase() === (lesItem.title || '').trim().toLowerCase()
-            );
-            if (matchedOld) {
-              nextFlatLessons.push({
-                ...matchedOld,
-                section: secName,
-                sectionOrder: sIdx + 1
-              });
-            } else {
-              nextFlatLessons.push({
-                _id: `lesson_course_ai_${Date.now()}_${sIdx}_${lIdx}`,
-                title: lesItem.title || `الدرس ${lIdx + 1}`,
-                description: lesItem.description || `درس جديد ضمن ${secName}`,
-                type: lesItem.type || 'video',
-                lessonCategory: 'language_mastery',
-                section: secName,
-                sectionOrder: sIdx + 1,
-                content: `### 🎯 1. ${lesItem.title}\nدرس جديد تمت إضافته عبر **جراح الكورس الشامل** ضمن (${secName}). افتح المُشرط الذكي لإثرائه الآن!`
-              });
-            }
-          });
-        });
-
-        if (nextFlatLessons.length > 0) {
-          commitLessonsListUpdate(nextFlatLessons, res.data.data.surgeonReport || 'تم تحديث هيكل الكراش كورس بالكامل!');
-        }
-        setCourseSurgeonCommand('');
-        setIsCourseSurgeonOpen(false);
-      }
-    } catch (e) {
-      alert('تعذر الاتصال بمسار جراحة الكورس الشامل، تأكد من إضافة مسار /operate-course-blueprint.');
-    } finally {
-      setIsOperatingLesson(false);
-    }
-  };
-
- // 🤖 دالة تعديل قسم واحد فقط بالذكاء الاصطناعي
-  const handleAiEditSingleSection = async (sectionMarkdown, userInstruction) => {
-    try {
-      const res = await axios.post('http://localhost:5000/api/academy2/surgeon/operate-section', {
-        courseTitle: `${course?.parentCertTitle || ''} ${course?.title || ''}`.trim(),
-        courseOrder: course?.courseOrder || (activeCertCourseIdx + 1) || 1,
-        lessonTitle: activeLesson?.title || '',
-        sectionMarkdown,
-        userInstruction,
-        targetLanguage: course?.targetLanguage || activeLangConfig.nameAr
-      });
-      if (res.data?.success && res.data.updatedSectionMarkdown) {
-        return res.data.updatedSectionMarkdown;
-      }
-    } catch (e) {
-      alert('تعذر تعديل هذا القسم بالذكاء الاصطناعي حالياً.');
-    }
-    return null;
-  };
-
- // ✨ دالة جلب الإلهام الذكي لتطوير شريحة أو عنصر واحد من الدرس
-  const handleAiInspireSingleSection = async (sectionMarkdown) => {
-    try {
-      const res = await axios.post('http://localhost:5000/api/academy2/surgeon/inspire-section', {
-        courseTitle: `${course?.parentCertTitle || ''} ${course?.title || ''}`.trim(),
-        courseOrder: course?.courseOrder || (activeCertCourseIdx + 1) || 1,
-        sectionName: activeLesson?.section || '',
-        lessonTitle: activeLesson?.title || '',
-        sectionMarkdown,
-        targetLanguage: course?.targetLanguage || activeLangConfig.nameAr
-      });
-      if (res.data?.success && res.data.data) {
-        return res.data.data;
-      }
-    } catch (e) {
-      alert('تعذر توليد الإلهام لهذه الشريحة، تأكد من إضافة مسار /inspire-section في السيرفر 5000.');
-    }
-    return null;
-  };
-
-
-
-  // 📥 تصدير وتحميل ملف الـ JSON المحدث في أي وقت
+// 📥 تصدير وتحميل ملف الـ JSON المحدث في أي وقت
   const handleExportUpdatedJSON = () => {
     const fullSnapshot = buildLiveCourseJSONSnapshot(lessons);
     const jsonString = JSON.stringify(fullSnapshot, null, 2);
@@ -1662,6 +1557,9 @@ const applyUpdatedLessonToState = async (updatedLessonObj, reportText = '') => {
         courseDescription: course?.description || '',
         courseOrder: course?.courseOrder || (activeCertCourseIdx + 1) || 1,
         sectionName: activeLesson.section || '',
+        unitLessonsTitles: hierarchyContext.unitLessonsTitles,
+        prevLessonTitle: hierarchyContext.prevLessonTitle,
+        nextLessonTitle: hierarchyContext.nextLessonTitle,
         lesson: activeLesson,
         targetLanguage: course?.targetLanguage || activeLangConfig.nameAr
       });
@@ -1678,7 +1576,7 @@ const applyUpdatedLessonToState = async (updatedLessonObj, reportText = '') => {
   const handleExecuteSurgeonCommand = async (commandText, opType = 'custom') => {
     if (!commandText || !commandText.trim() || !activeLesson) return;
     setIsOperatingLesson(true);
-    setSurgeonStatusMsg('🩺 جاري تنفيذ التعديل الجراحي وحقن العناصر في الدرس...');
+    setSurgeonStatusMsg('🩺 جاري تنفيذ التعديل الجراحي المترابط ومزامنة الصوتيات والتمارين في الدرس...');
 
     try {
       const res = await axios.post('http://localhost:5000/api/academy2/surgeon/operate-lesson', {
@@ -1686,6 +1584,9 @@ const applyUpdatedLessonToState = async (updatedLessonObj, reportText = '') => {
         courseDescription: course?.description || '',
         courseOrder: course?.courseOrder || (activeCertCourseIdx + 1) || 1,
         sectionName: activeLesson.section || '',
+        unitLessonsTitles: hierarchyContext.unitLessonsTitles,
+        prevLessonTitle: hierarchyContext.prevLessonTitle,
+        nextLessonTitle: hierarchyContext.nextLessonTitle,
         lesson: activeLesson,
         userCommand: commandText,
         operationType: opType,
@@ -1702,6 +1603,606 @@ const applyUpdatedLessonToState = async (updatedLessonObj, reportText = '') => {
       setIsOperatingLesson(false);
     }
   };
+
+  // ============================================================================
+  // 🧹✨ محرك الترتيب الشامل وحذف التكرار على 3 مستويات (الدرس + الوحدة + الكورس)
+  // ============================================================================
+
+  // 1. 🧹 ترتيب الدرس الحالي بالكامل وحذف الأقسام/المحادثات/الصوتيات المكررة
+  const handleOrganizeAndDedupeCurrentLesson = async (useDeepAI = false) => {
+    if (!activeLesson) return;
+
+    // أ) تنظيف وترتيب فوري للـ Markdown واستوديو الصوتيات
+    const cleanedMarkdown = formatAndDeduplicateMarkdown(activeLesson.content || '');
+    const rawSnippetLines = (activeLesson.codeSnippet || '').split('\n');
+    const seenAudio = new Set();
+    const dedupedSnippetLines = [];
+    rawSnippetLines.forEach(line => {
+      const key = line.trim().toLowerCase();
+      if (!key || key.startsWith('🎧') || !seenAudio.has(key)) {
+        if (key) seenAudio.add(key);
+        dedupedSnippetLines.push(line);
+      }
+    });
+
+    const locallyCleanedLesson = {
+      ...activeLesson,
+      content: cleanedMarkdown,
+      codeSnippet: dedupedSnippetLines.join('\n').trim()
+    };
+
+    if (!useDeepAI) {
+      await applyUpdatedLessonToState(
+        locallyCleanedLesson,
+        'تم ترتيب اللغات في الدرس بالكامل، دمج الجمل المبعثرة، وحذف جميع العناصر والمحادثات المكررة!'
+      );
+      return;
+    }
+
+    // ب) ترتيب عميق إضافي بالـ AI إذا طلب المستخدم ذلك
+    await handleExecuteSurgeonCommand(
+      'قم بترتيب وتنسيق هذا الدرس بالكامل ليكون مثالياً للغات: ادمج الكلمات الأجنبية المقطعة في عبارات متكاملة، رتب المحادثات والجداول، واحذف أي محادثات أو فقرات أو تمارين مكررة دون حذف الأقسام الأساسية للدرس.',
+      'clean_and_dedupe_lesson'
+    );
+  };
+
+  // 2. 🧹 ترتيب الوحدة الدراسية بالكامل (حذف الدروس المكررة + ترتيب محتوى كل درس فيها)
+  const handleOrganizeAndDedupeUnit = async (targetSectionName = activeUnitSurgeon) => {
+    if (!targetSectionName) return;
+    setIsOperatingLesson(true);
+    setSurgeonStatusMsg(`🧹 جاري ترتيب الوحدة (${targetSectionName})، حذف الدروس المكررة، وتنسيق اللغات داخل جميع دروسها...`);
+
+    try {
+      const seenTitles = new Set();
+      const cleanedLessonsList = [];
+      let removedLessonsCount = 0;
+
+      lessons.forEach(les => {
+        if (les.section !== targetSectionName) {
+          cleanedLessonsList.push(les);
+          return;
+        }
+
+        // تطبيع عنوان الدرس لكشف الدروس المكررة في نفس الوحدة
+        const normTitle = (les.title || '')
+          .replace(/^(?:الدرس|درس|محطة)\s*\d+\s*[:-]?\s*/i, '')
+          .replace(/[^\p{L}\p{N}]/gu, '')
+          .toLowerCase();
+
+        if (normTitle && seenTitles.has(normTitle)) {
+          removedLessonsCount++;
+          return; // تخطي وحذف الدرس المكرر
+        }
+        if (normTitle) seenTitles.add(normTitle);
+
+        // تنظيف محتوى الدرس الداخلي وترتيب اللغات وحذف الأقسام المكررة بداخله
+        cleanedLessonsList.push({
+          ...les,
+          content: formatAndDeduplicateMarkdown(les.content || '')
+        });
+      });
+
+      await commitLessonsListUpdate(
+        cleanedLessonsList,
+        `تم ترتيب الوحدة (${targetSectionName}) وتنسيق دروسها بنجاح (تم حذف ${removedLessonsCount} دروس مكررة وتنظيف الحشو الداخلي)!`
+      );
+    } finally {
+      setIsOperatingLesson(false);
+    }
+  };
+
+  // 3. 🧹 ترتيب الكراش كورس بالكامل (توحيد الوحدات المتشابهة + حذف الدروس المكررة + ترتيب محتوى كل الدروس)
+  const handleOrganizeAndDedupeFullCourse = async () => {
+    if (!window.confirm('هل تريد ترتيب الكراش كورس بالكامل، دمج/حذف الدروس والعناصر المكررة، وتنسيق اللغات في جميع الوحدات؟')) return;
+    setIsOperatingLesson(true);
+    setSurgeonStatusMsg('🌍🧹 جاري فحص وترتيب الكراش كورس بالكامل وحذف جميع التكرارات عبر الوحدات والدروس...');
+
+    try {
+      const seenGlobalLessonKeys = new Set();
+      const canonicalUnitNamesMap = {};
+      const cleanedCourseLessons = [];
+      let removedDuplicatesCount = 0;
+
+      lessons.forEach(les => {
+        const rawSec = (les.section || 'الوحدة 1').trim();
+        const normSecKey = rawSec
+          .replace(/^(?:الوحدة|وحدة)\s*\d+\s*[:-]?\s*/i, '')
+          .replace(/[^\p{L}\p{N}]/gu, '')
+          .toLowerCase();
+
+        if (!canonicalUnitNamesMap[normSecKey]) {
+          canonicalUnitNamesMap[normSecKey] = rawSec;
+        }
+        const finalSecName = canonicalUnitNamesMap[normSecKey];
+
+        const normLessonTitle = (les.title || '')
+          .replace(/^(?:الدرس|درس)\s*\d+\s*[:-]?\s*/i, '')
+          .replace(/[^\p{L}\p{N}]/gu, '')
+          .toLowerCase();
+
+        const uniqueLessonKey = `${normSecKey}__${normLessonTitle}`;
+        if (normLessonTitle && seenGlobalLessonKeys.has(uniqueLessonKey)) {
+          removedDuplicatesCount++;
+          return; // حذف الدرس المكرر
+        }
+        if (normLessonTitle) seenGlobalLessonKeys.add(uniqueLessonKey);
+
+        cleanedCourseLessons.push({
+          ...les,
+          section: finalSecName,
+          content: formatAndDeduplicateMarkdown(les.content || '')
+        });
+      });
+
+      await commitLessonsListUpdate(
+        cleanedCourseLessons,
+        `تم ترتيب الكراش كورس بالكامل وتنسيق جميع دروسه بنجاح (تم تنظيف ${removedDuplicatesCount} عناصر/دروس مكررة)!`
+      );
+    } finally {
+      setIsOperatingLesson(false);
+    }
+  };
+
+  // 4. ➕ دالة إضافة وحدة جديدة بالكامل للكورس (مهمة جداً لنافذة جراح الكورس)
+  const handleAddNewUnitToCourse = async (customUnitName = '', proposedLessonsTitles = []) => {
+    const unitTitle = (customUnitName || newUnitNameInput || '').trim();
+    if (!unitTitle) return alert('اكتب اسم الوحدة الجديدة أولاً!');
+
+    if (Array.isArray(proposedLessonsTitles) && proposedLessonsTitles.length > 0) {
+      setNewUnitNameInput('');
+      await handleExecuteCourseSurgeon(
+        `أضف وحدة جديدة بالكامل إلى الكورس بعنوان "${unitTitle}" تضم هذه الدروس بالتفصيل: (${proposedLessonsTitles.join('، ')}) مع بناء محتوى تأسيسي وصوتي لكل درس فيها.`
+      );
+      return;
+    }
+
+    const starterLesson = {
+      _id: `lesson_new_unit_${Date.now()}`,
+      title: `الدرس 1: مدخل تأسيسي إلى ${unitTitle}`,
+      description: `الدرس الافتتاحي في ${unitTitle}`,
+      type: 'video',
+      lessonCategory: 'language_mastery',
+      section: unitTitle,
+      content: `### 🎯 1. مرحباً بك في ${unitTitle}\nتم إنشاء هذه الوحدة الجديدة بنجاح! افتح **جراح الوحدة** أو **المُشرط الذكي** لتوليد دروسها ومحتواها الصوتي والتفاعلي الكامل.\n\n### 🧩 2. تمرين تفاعلي سريع\n- اختر الإجابة الصحيحة: [[الصواب | خيار 1 | خيار 2]]`,
+      codeSnippet: '',
+      codeExplanation: ''
+    };
+    const nextLessons = [...lessons, starterLesson];
+    setNewUnitNameInput('');
+    setOpenSections(prev => ({ ...prev, [unitTitle]: true }));
+    await commitLessonsListUpdate(nextLessons, `تم إنشاء الوحدة الجديدة (${unitTitle}) وإضافتها للكورس!`);
+    setActiveLesson(starterLesson);
+  };
+
+
+  // ============================================================================
+  // 🏗️ دوال جراح الوحدة (Unit-Level Surgeon V2) وجراح الكورس (Course-Level Surgeon V2)
+  // ============================================================================
+
+  // طلب إلهام مجلس الحكماء الثلاثي للوحدة المحددة
+  const handleInspireUnit = async (targetSectionName = activeUnitSurgeon) => {
+    if (!targetSectionName) return;
+    setIsInspiringUnit(true);
+    try {
+      const allUnits = hierarchyContext.allUnitsNames;
+      const uIdx = allUnits.indexOf(targetSectionName);
+      const sectionLessons = lessons.filter(l => l.section === targetSectionName);
+
+      const res = await axios.post('http://localhost:5000/api/academy2/surgeon/inspire-unit', {
+        courseTitle: `${course?.parentCertTitle || ''} ${course?.title || ''}`.trim(),
+        courseDescription: course?.description || '',
+        courseOrder: course?.courseOrder || (activeCertCourseIdx + 1) || 1,
+        sectionName: targetSectionName,
+        allUnitsNames: allUnits,
+        prevUnitName: uIdx > 0 ? allUnits[uIdx - 1] : '',
+        nextUnitName: uIdx >= 0 && uIdx < allUnits.length - 1 ? allUnits[uIdx + 1] : '',
+        currentLessons: sectionLessons,
+        targetLanguage: course?.targetLanguage || activeLangConfig.nameAr
+      });
+
+      if (res.data?.success && res.data.data) {
+        setUnitInspirationData(res.data.data);
+      }
+    } catch (e) {
+      alert('تعذر جلب إلهام الوحدة، تأكد من تحديث مسار /inspire-unit في السيرفر 5000.');
+    } finally {
+      setIsInspiringUnit(false);
+    }
+  };
+
+  // فتح نافذة جراح الوحدة الفخمة مع جلب الإلهام تلقائياً
+  const openUnitSurgeonModal = (sectionName) => {
+    setActiveUnitSurgeon(sectionName);
+    setEditingUnitNameValue(sectionName);
+    setUnitInspirationData(null);
+    handleInspireUnit(sectionName);
+  };
+
+  // 1. إعادة تسمية الوحدة يدوياً
+  const handleRenameUnit = (oldSectionName, newSectionName) => {
+    const trimmed = (newSectionName || '').trim();
+    if (!trimmed || trimmed === oldSectionName) return;
+    const nextLessons = lessons.map(l => (l.section === oldSectionName ? { ...l, section: trimmed } : l));
+    if (unitSummariesMap[oldSectionName]) {
+      setUnitSummariesMap(prev => {
+        const copy = { ...prev, [trimmed]: prev[oldSectionName] };
+        delete copy[oldSectionName];
+        return copy;
+      });
+    }
+    setOpenSections(prev => ({ ...prev, [trimmed]: true }));
+    setActiveUnitSurgeon(trimmed);
+    commitLessonsListUpdate(nextLessons, `تم تغيير اسم الوحدة إلى (${trimmed}) وحفظها!`);
+  };
+
+  // 2. إضافة درس جديد داخل وحدة محددة (مع خيار تأليفه بالكامل بالذكاء الاصطناعي فوراً!)
+  const handleAddLessonToUnit = async (sectionName, customTitle = '', customDesc = '') => {
+    const titleToUse = (customTitle || newLessonTitleInUnit || '').trim();
+    if (!titleToUse) return alert('اكتب عنوان الدرس الجديد أولاً!');
+
+    let newLessonObj = {
+      _id: `lesson_custom_${Date.now()}`,
+      title: titleToUse,
+      description: customDesc || `درس تطبيقي متكامل ضمن (${sectionName})`,
+      type: 'video',
+      lessonCategory: 'language_mastery',
+      section: sectionName,
+      content: `### 🎯 1. الفكرة الجوهرية والقاعدة خطوة بخطوة\nمرحباً بك في درس **${titleToUse}** ضمن **${sectionName}**.\n\n\`[المكعب 1: الفاعل] + [المكعب 2: الفعل] = [جملة صحيحة]\`\n\n### 🧩 2. تمرين املأ الفراغ التفاعلي\n- اختر الإجابة الصحيحة لإتمام الجملة: [[الإجابة الصحيحة | خيار خاطئ 1 | خيار خاطئ 2]]`,
+      codeSnippet: '',
+      codeExplanation: '',
+      codingPractice: {
+        hasPractice: true,
+        taskQuestion: `اكتب 3 جمل تطبيقية حول (${titleToUse}):`,
+        starterCode: '// 1. \n// 2. \n// 3. ',
+        hints: ['راجع جدول المفردات في الأعلى.', 'استخدم معادلة مكعبات الليغو.'],
+        solutionCode: '1. Example 1\n2. Example 2'
+      },
+      dailyQuest: {
+        question: `ما الهدف التطبيقي من درس (${titleToUse})؟`,
+        options: ['توظيف القاعدة والمفردات صوتياً وكتابياً', 'الحفظ دون فهم', 'تجاهل السياق', 'لا شيء مما سبق'],
+        correctAnswerIndex: 0,
+        explanation: 'التطبيق الصوتي والكتابي في سياق الوحدة هو مفتاح الطلاقة.',
+        bonusExp: 50
+      },
+      bossQuiz: []
+    };
+
+    // إذا كان خيار التوليد الكامل بالـ AI مفعلاً، نقوم ببناء الدرس كاملاً عبر المسار الجراحي!
+    if (generateNewLessonWithAI) {
+      setIsOperatingLesson(true);
+      setSurgeonStatusMsg(`🤖 جاري تأليف الدرس الجديد (${titleToUse}) بالكامل مع صوتيات IPA وتمارينه التفاعلية...`);
+      try {
+        const res = await axios.post('http://localhost:5000/api/academy2/surgeon/operate-lesson', {
+          courseTitle: `${course?.parentCertTitle || ''} ${course?.title || ''}`.trim(),
+          courseDescription: course?.description || '',
+          courseOrder: course?.courseOrder || (activeCertCourseIdx + 1) || 1,
+          sectionName,
+          unitLessonsTitles: lessons.filter(l => l.section === sectionName).map(l => l.title),
+          lesson: newLessonObj,
+          userCommand: `قم بتأليف وبناء هذا الدرس الجديد ("${titleToUse}" - ${customDesc}) بالكامل من الصفر ليكون مترابطاً مع الوحدة ("${sectionName}") شاملاً: الشرح العميق، معادلة الليغو، جدول المفردات مع IPA، سُلّم البناء التراكمي، حوار واقعي ناطق، ورشة الأخطاء الشائعة، وتمرين املأ الفراغ التفاعلي [[الصواب | خطأ1 | خطأ2]]، مع 5 جمل صوتية في codeSnippet.`,
+          operationType: 'build_new_lesson',
+          targetLanguage: course?.targetLanguage || activeLangConfig.nameAr
+        });
+        if (res.data?.success && res.data.updatedLesson) {
+          newLessonObj = { ...newLessonObj, ...res.data.updatedLesson };
+        }
+      } catch (e) {
+        console.warn('Fallback to starter lesson template');
+      } finally {
+        setIsOperatingLesson(false);
+      }
+    }
+
+    const unitLessonIndices = lessons.map((l, i) => (l.section === sectionName ? i : -1)).filter(i => i !== -1);
+    const insertAt = unitLessonIndices.length > 0 ? unitLessonIndices[unitLessonIndices.length - 1] + 1 : lessons.length;
+    const nextLessons = [...lessons.slice(0, insertAt), newLessonObj, ...lessons.slice(insertAt)];
+
+    setNewLessonTitleInUnit('');
+    await commitLessonsListUpdate(nextLessons, `تمت إضافة الدرس المتكامل (${titleToUse}) إلى (${sectionName})!`);
+    setActiveLesson(newLessonObj);
+  };
+
+  // 3. حذف درس معين من داخل نافذة جراح الوحدة
+  const handleDeleteSingleLessonFromUnit = (lessonId, lessonTitle) => {
+    if (!window.confirm(`هل أنت متأكد من حذف الدرس (${lessonTitle})؟`)) return;
+    const nextLessons = lessons.filter(l => l._id !== lessonId);
+    commitLessonsListUpdate(nextLessons, `تم حذف الدرس (${lessonTitle}) بنجاح!`);
+  };
+
+  // 4. تحريك درس لأعلى أو لأسفل داخل الوحدة
+  const handleMoveLessonInUnit = (sectionName, lessonId, direction) => {
+    const unitLessons = lessons.filter(l => l.section === sectionName);
+    const idx = unitLessons.findIndex(l => l._id === lessonId);
+    if (idx === -1) return;
+    const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= unitLessons.length) return;
+
+    const swappedUnitLessons = [...unitLessons];
+    const temp = swappedUnitLessons[idx];
+    swappedUnitLessons[idx] = swappedUnitLessons[targetIdx];
+    swappedUnitLessons[targetIdx] = temp;
+
+    const finalLessons = [];
+    let inserted = false;
+    lessons.forEach(l => {
+      if (l.section === sectionName) {
+        if (!inserted) {
+          finalLessons.push(...swappedUnitLessons);
+          inserted = true;
+        }
+      } else {
+        finalLessons.push(l);
+      }
+    });
+    commitLessonsListUpdate(finalLessons, `تم تحديث ترتيب الدروس داخل (${sectionName})!`);
+  };
+
+  // 5. حذف وحدة كاملة
+  const handleDeleteUnit = (sectionName) => {
+    if (!window.confirm(`هل أنت متأكد من حذف الوحدة (${sectionName}) بجميع دروسها؟`)) return;
+    const nextLessons = lessons.filter(l => l.section !== sectionName);
+    setActiveUnitSurgeon(null);
+    commitLessonsListUpdate(nextLessons, `تم حذف الوحدة (${sectionName}) بنجاح!`);
+  };
+
+  // 6. جراحة الوحدة بالذكاء الاصطناعي (Unit AI Surgeon V2 - تبني محتوى غني للدروس الجديدة!)
+  const handleExecuteUnitSurgeon = async (sectionName, sectionLessons, customCmd = null) => {
+    const cmd = (customCmd || unitSurgeonCommand || '').trim();
+    if (!cmd) return;
+    setIsOperatingLesson(true);
+    setSurgeonStatusMsg(`🏗️ جاري تنفيذ الجراحة الذكية على الوحدة (${sectionName}) وتوليد المحتوى التفاعلي للدروس الجديدة...`);
+    try {
+      const allUnits = hierarchyContext.allUnitsNames;
+      const uIdx = allUnits.indexOf(sectionName);
+
+      const res = await axios.post('http://localhost:5000/api/academy2/surgeon/operate-unit', {
+        courseTitle: `${course?.parentCertTitle || ''} ${course?.title || ''}`.trim(),
+        courseDescription: course?.description || '',
+        courseOrder: course?.courseOrder || (activeCertCourseIdx + 1) || 1,
+        sectionName,
+        prevUnitName: uIdx > 0 ? allUnits[uIdx - 1] : '',
+        nextUnitName: uIdx >= 0 && uIdx < allUnits.length - 1 ? allUnits[uIdx + 1] : '',
+        currentLessons: sectionLessons,
+        userCommand: cmd,
+        targetLanguage: course?.targetLanguage || activeLangConfig.nameAr
+      });
+
+      if (res.data?.success && Array.isArray(res.data.data?.updatedLessonsBlueprint)) {
+        if (res.data.data.updatedUnitSummary) {
+          setUnitSummariesMap(prev => ({
+            ...prev,
+            [sectionName]: res.data.data.updatedUnitSummary
+          }));
+        }
+
+        const blueprint = res.data.data.updatedLessonsBlueprint;
+        const rebuiltUnitLessons = blueprint.map((item, idx) => {
+          const existing = sectionLessons.find(
+            old => old.title.trim().toLowerCase() === (item.title || '').trim().toLowerCase()
+          );
+
+          if (existing && !item.isNewOrModified) {
+            return {
+              ...existing,
+              description: item.description || existing.description
+            };
+          }
+
+          return {
+            ...(existing || {}),
+            _id: existing?._id || `lesson_unit_ai_${Date.now()}_${idx}`,
+            title: item.title || `درس ${idx + 1}`,
+            description: item.description || existing?.description || '',
+            type: item.type || existing?.type || 'video',
+            lessonCategory: 'language_mastery',
+            section: sectionName,
+            content: item.content || existing?.content || `### 🎯 1. ${item.title}\n${item.description || ''}`,
+            codeSnippet: item.codeSnippet || existing?.codeSnippet || '',
+            codeExplanation: item.codeExplanation || existing?.codeExplanation || '',
+            codingPractice: item.codingPractice || existing?.codingPractice || null,
+            dailyQuest: item.dailyQuest || existing?.dailyQuest || null
+          };
+        });
+
+        const finalLessons = [];
+        let unitInserted = false;
+        lessons.forEach(l => {
+          if (l.section === sectionName) {
+            if (!unitInserted) {
+              finalLessons.push(...rebuiltUnitLessons);
+              unitInserted = true;
+            }
+          } else {
+            finalLessons.push(l);
+          }
+        });
+        if (!unitInserted) finalLessons.push(...rebuiltUnitLessons);
+
+        await commitLessonsListUpdate(finalLessons, res.data.data.surgeonReport || `تم تحديث هيكل ودروس الوحدة (${sectionName}) بالذكاء الاصطناعي!`);
+        setUnitSurgeonCommand('');
+      }
+    } catch (e) {
+      alert('تعذر الاتصال بمسار جراحة الوحدة في السيرفر 5000.');
+    } finally {
+      setIsOperatingLesson(false);
+    }
+  };
+
+  // ============================================================================
+  // 🌍 دوال جراح الكورس الشامل (Course-Level Surgeon Modal V2)
+  // ============================================================================
+
+  // طلب إلهام مجلس الحكماء الثلاثي للكورس بالكامل
+  const handleInspireCourse = async () => {
+    setIsInspiringCourse(true);
+    try {
+      const currentBlueprint = Object.values(
+        lessons.reduce((acc, l) => {
+          const sName = l.section || 'الوحدة 1';
+          if (!acc[sName]) acc[sName] = { sectionName: sName, lessons: [] };
+          acc[sName].lessons.push({ title: l.title, type: l.type, description: l.description });
+          return acc;
+        }, {})
+      );
+
+      const res = await axios.post('http://localhost:5000/api/academy2/surgeon/inspire-course', {
+        courseTitle: course?.title || '',
+        courseDescription: course?.description || '',
+        courseOrder: course?.courseOrder || (activeCertCourseIdx + 1) || 1,
+        parentCertTitle: course?.parentCertTitle || '',
+        currentBlueprint,
+        targetLanguage: course?.targetLanguage || activeLangConfig.nameAr
+      });
+
+      if (res.data?.success && res.data.data) {
+        setCourseInspirationData(res.data.data);
+      }
+    } catch (e) {
+      alert('تعذر جلب إلهام الكورس الشامل، تأكد من إضافة مسار /inspire-course في السيرفر 5000.');
+    } finally {
+      setIsInspiringCourse(false);
+    }
+  };
+// 🤖 دالة تعديل شريحة واحدة فقط بالذكاء الاصطناعي (مع الترابط السياقي ومزامنة الصوتيات!)
+  const handleAiEditSingleSection = async (sectionMarkdown, userInstruction) => {
+    try {
+      const blocks = splitMarkdownIntoBlocks( sanitizeLessonMarkdown(activeLesson?.content || '', true) );
+      const allBlocksHeadings = blocks.map(b => (b.split('\n')[0] || '').replace(/^#+\s*/, '').trim());
+      const blockIndex = blocks.findIndex(b => b.trim() === sectionMarkdown.trim());
+
+      const res = await axios.post('http://localhost:5000/api/academy2/surgeon/operate-section', {
+        courseTitle: `${course?.parentCertTitle || ''} ${course?.title || ''}`.trim(),
+        courseOrder: course?.courseOrder || (activeCertCourseIdx + 1) || 1,
+        sectionName: activeLesson?.section || '',
+        lessonTitle: activeLesson?.title || '',
+        lessonDescription: cleanLessonDesc(activeLesson?.description || ''),
+        allBlocksHeadings,
+        blockIndex: blockIndex >= 0 ? blockIndex : 0,
+        prevBlockHeading: blockIndex > 0 ? allBlocksHeadings[blockIndex - 1] : '',
+        nextBlockHeading: blockIndex >= 0 && blockIndex < allBlocksHeadings.length - 1 ? allBlocksHeadings[blockIndex + 1] : '',
+        sectionMarkdown,
+        userInstruction,
+        targetLanguage: course?.targetLanguage || activeLangConfig.nameAr
+      });
+
+      if (res.data?.success && res.data.updatedSectionMarkdown) {
+        // إذا أرجع الـ AI جملاً صوتية جديدة، نلحقها تلقائياً باستوديو الصوتيات للدرس!
+        if (res.data.newAudioStudioLines && res.data.newAudioStudioLines.includes('IPA:')) {
+          const currentSnippet = activeLesson?.codeSnippet || '';
+          const mergedSnippet = `${currentSnippet}\n${res.data.newAudioStudioLines}`.trim();
+          setActiveLesson(prev => prev ? { ...prev, codeSnippet: mergedSnippet } : prev);
+        }
+        return res.data.updatedSectionMarkdown;
+      }
+    } catch (e) {
+      alert('تعذر تعديل هذا القسم بالذكاء الاصطناعي حالياً.');
+    }
+    return null;
+  };
+
+  // ✨ دالة جلب الإلهام الذكي المترابط لتطوير شريحة أو عنصر واحد من الدرس
+  const handleAiInspireSingleSection = async (sectionMarkdown) => {
+    try {
+      const blocks = splitMarkdownIntoBlocks( sanitizeLessonMarkdown(activeLesson?.content || '', true) );
+      const allBlocksHeadings = blocks.map(b => (b.split('\n')[0] || '').replace(/^#+\s*/, '').trim());
+      const blockIndex = blocks.findIndex(b => b.trim() === sectionMarkdown.trim());
+
+      const res = await axios.post('http://localhost:5000/api/academy2/surgeon/inspire-section', {
+        courseTitle: `${course?.parentCertTitle || ''} ${course?.title || ''}`.trim(),
+        courseDescription: course?.description || '',
+        courseOrder: course?.courseOrder || (activeCertCourseIdx + 1) || 1,
+        sectionName: activeLesson?.section || '',
+        unitLessonsTitles: hierarchyContext.unitLessonsTitles,
+        lessonTitle: activeLesson?.title || '',
+        lessonDescription: cleanLessonDesc(activeLesson?.description || ''),
+        allBlocksHeadings,
+        blockIndex: blockIndex >= 0 ? blockIndex : 0,
+        prevBlockHeading: blockIndex > 0 ? allBlocksHeadings[blockIndex - 1] : '',
+        nextBlockHeading: blockIndex >= 0 && blockIndex < allBlocksHeadings.length - 1 ? allBlocksHeadings[blockIndex + 1] : '',
+        sectionMarkdown,
+        targetLanguage: course?.targetLanguage || activeLangConfig.nameAr
+      });
+      if (res.data?.success && res.data.data) {
+        return res.data.data;
+      }
+    } catch (e) {
+      alert('تعذر توليد الإلهام لهذه الشريحة، تأكد من تحديث مسار /inspire-section في السيرفر 5000.');
+    }
+    return null;
+  };
+
+  const handleExecuteCourseSurgeon = async (customCmd = null) => {
+    const command = (customCmd || courseSurgeonCommand || '').trim();
+    if (!command) return;
+
+    setIsOperatingLesson(true);
+    setSurgeonStatusMsg('🌍 جاري تنفيذ الجراحة الذكية على هيكل الكورس بالكامل...');
+    try {
+      const currentBlueprint = Object.values(
+        lessons.reduce((units, lesson) => {
+          const sectionName = lesson.section || 'الوحدة 1';
+          if (!units[sectionName]) units[sectionName] = { sectionName, lessons: [] };
+          units[sectionName].lessons.push(lesson);
+          return units;
+        }, {})
+      );
+      const res = await axios.post('http://localhost:5000/api/academy2/surgeon/operate-course', {
+        courseTitle: course?.title || '',
+        courseDescription: course?.description || '',
+        courseOrder: course?.courseOrder || activeCertCourseIdx + 1,
+        parentCertTitle: course?.parentCertTitle || '',
+        currentBlueprint,
+        userCommand: command,
+        targetLanguage: course?.targetLanguage || activeLangConfig.nameAr
+      });
+
+      const data = res.data?.data;
+      const updatedBlueprint = data?.updatedBlueprint || data?.updatedCourseBlueprint || data?.updatedSections;
+      const updatedLessons = data?.updatedLessons;
+      let nextLessons = null;
+
+      if (res.data?.success && Array.isArray(updatedBlueprint)) {
+        nextLessons = updatedBlueprint.flatMap((section, sectionIndex) => {
+          const sectionName = section.sectionName || section.name || `الوحدة ${sectionIndex + 1}`;
+          return (section.lessons || []).map((lesson, lessonIndex) => {
+            const existing = lessons.find(item =>
+              item.section === sectionName &&
+              item.title?.trim().toLowerCase() === (lesson.title || '').trim().toLowerCase()
+            );
+            return {
+              ...(existing || {}),
+              ...lesson,
+              _id: lesson._id || existing?._id || `lesson_course_ai_${Date.now()}_${sectionIndex}_${lessonIndex}`,
+              title: lesson.title || `درس ${lessonIndex + 1}`,
+              section: sectionName,
+              sectionOrder: section.sectionOrder || sectionIndex + 1
+            };
+          });
+        });
+      } else if (res.data?.success && Array.isArray(updatedLessons)) {
+        nextLessons = updatedLessons;
+      }
+
+      if (nextLessons) {
+        await commitLessonsListUpdate(nextLessons, data?.surgeonReport || 'تم تحديث هيكل الكورس ودروسه بالذكاء الاصطناعي!');
+        setCourseSurgeonCommand('');
+      } else {
+        alert(res.data?.message || 'لم يُرجع الخادم مخططاً محدثاً للكورس.');
+      }
+    } catch (e) {
+      alert('تعذر الاتصال بمسار جراحة الكورس في السيرفر 5000.');
+    } finally {
+      setIsOperatingLesson(false);
+    }
+  };
+
+  const openCourseSurgeonModal = () => {
+    setIsCourseSurgeonOpen(true);
+    if (!courseInspirationData) {
+      handleInspireCourse();
+    }
+  };
+
 
   const handleUndoLastSurgeonEdit = async () => {
     if (lessonUndoStack.length === 0) return;
@@ -3104,90 +3605,17 @@ const applyUpdatedLessonToState = async (updatedLessonObj, reportText = '') => {
         {/* ======================================================= */}
         {/* 🌍 جراح الكراش كورس الشامل (Course-Level Surgeon - خاص بالأدمين) */}
         {/* ======================================================= */}
-        {canEditCourse && (
-          <div className="px-3.5 py-3 bg-gradient-to-r from-amber-950/30 via-[#070d19] to-indigo-950/30 border-b border-amber-500/30 space-y-2.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-black text-amber-300 flex items-center gap-1.5">
-                <Stethoscope size={13} className="text-amber-400" /> 🌍 جراح الكورس الشامل
-              </span>
-              <button
-                type="button"
-                onClick={() => setIsCourseSurgeonOpen(!isCourseSurgeonOpen)}
-                className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition-all ${
-                  isCourseSurgeonOpen
-                    ? 'bg-amber-500 text-slate-950 border-amber-400'
-                    : 'bg-amber-500/15 text-amber-300 border-amber-500/30 hover:bg-amber-500 hover:text-slate-950'
-                }`}
-              >
-                {isCourseSurgeonOpen ? 'إغلاق ▲' : 'هندسة الوحدات ▼'}
-              </button>
-            </div>
-
-            {isCourseSurgeonOpen && (
-              <div className="space-y-2.5 pt-1 animate-fade-in">
-                <div className="grid grid-cols-3 gap-1">
-                  <button
-                    type="button"
-                    disabled={isOperatingLesson}
-                    onClick={() => handleExecuteCourseSurgeon('بصفتك الناقد العالمي Rater: راجع تسلسل وحدات هذا الكورس وأضف وحدة انتقالية أو مشروعاً يربط الوحدات ببعضها بتماسك 100%.')}
-                    className="bg-slate-900 hover:bg-amber-500/20 border border-slate-700 hover:border-amber-400 text-[10px] font-bold text-amber-300 p-1.5 rounded-lg text-center"
-                  >
-                    🧐 رؤية الناقد
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isOperatingLesson}
-                    onClick={() => handleExecuteCourseSurgeon('بصفتك الأستاذ الخبير: ادمج الوحدات المتشابهة، وأضف وحدة تطبيقية لما ينقص الكورس علمياً.')}
-                    className="bg-slate-900 hover:bg-indigo-500/20 border border-slate-700 hover:border-indigo-400 text-[10px] font-bold text-indigo-300 p-1.5 rounded-lg text-center"
-                  >
-                    👨‍🏫 رؤية الأستاذ
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isOperatingLesson}
-                    onClick={() => handleExecuteCourseSurgeon('بصفتك التلميذ الذكي: أضف وحدة مراجعة سريعة وتحديات ممتعة قبل نهاية الكورس لتثبيت المهارات.')}
-                    className="bg-slate-900 hover:bg-emerald-500/20 border border-slate-700 hover:border-emerald-400 text-[10px] font-bold text-emerald-300 p-1.5 rounded-lg text-center"
-                  >
-                    🎓 رؤية التلميذ
-                  </button>
-                </div>
-
-                <textarea
-                  value={courseSurgeonCommand}
-                  onChange={(e) => setCourseSurgeonCommand(e.target.value)}
-                  placeholder="أمر جراحي للكورس (مثال: أضف وحدة محادثات المطار قبل الوحدة الأخيرة، أو رتب الوحدات من الأسهل للأصعب)..."
-                  rows={2}
-                  className="w-full bg-slate-950 border border-amber-500/40 rounded-xl p-2 text-[11px] text-white outline-none resize-none"
-                />
-                <button
-                  type="button"
-                  disabled={isOperatingLesson || !courseSurgeonCommand.trim()}
-                  onClick={() => handleExecuteCourseSurgeon()}
-                  className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[11px] py-2 rounded-xl transition-all disabled:opacity-50"
-                >
-                  {isOperatingLesson ? '⏳ جاري هندسة الكورس...' : '⚡ نفّذ على هيكل الكورس بالـ AI'}
-                </button>
-
-                <div className="pt-2 border-t border-slate-800/80 flex items-center gap-1.5">
-                  <input
-                    type="text"
-                    value={newUnitNameInput}
-                    onChange={(e) => setNewUnitNameInput(e.target.value)}
-                    placeholder="اسم وحدة جديدة يدوياً..."
-                    className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-[11px] text-white outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddNewUnitToCourse}
-                    className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-[11px] px-2.5 py-1.5 rounded-lg flex items-center gap-1 shrink-0"
-                  >
-                    <Plus size={12} /> وحدة
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+{canEditCourse && (
+       <div className="px-3.5 py-3 bg-gradient-to-r from-amber-950/30 via-[#070d19] to-indigo-950/30 border-b border-amber-500/30">
+         <button
+           type="button"
+           onClick={openCourseSurgeonModal}
+           className="w-full bg-gradient-to-l from-amber-500 via-yellow-400 to-amber-500 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-black text-xs py-2.5 px-4 rounded-xl shadow-[0_0_20px_rgba(245,158,11,0.3)] flex items-center justify-center gap-2 transition-all"
+         >
+           <Stethoscope size="{15}"/> 🌍 فتح استوديو جراح الكورس الشامل
+         </button>
+       </div>
+     )}
 
         <div className="flex-1 overflow-y-auto p-3.5 space-y-3 custom-scrollbar">
           {Object.entries(groupedLessons).map(([sectionName, sectionLessons], sIndex) => {
@@ -3212,28 +3640,19 @@ const applyUpdatedLessonToState = async (updatedLessonObj, reportText = '') => {
                   </button>
 
                   <div className="flex items-center gap-1.5">
-                    {canEditCourse && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (isThisUnitSurgeonActive) {
-                            setActiveUnitSurgeon(null);
-                          } else {
-                            setActiveUnitSurgeon(sectionName);
-                            setEditingUnitNameValue(sectionName);
-                          }
-                        }}
-                        className={`p-1.5 rounded-lg border transition-all ${
-                          isThisUnitSurgeonActive
-                            ? 'bg-amber-500 text-slate-950 border-amber-400 shadow'
-                            : 'bg-slate-900 hover:bg-amber-500/20 text-amber-400 border-amber-500/30'
-                        }`}
-                        title="جراح الوحدة (إضافة/حذف دروس أو تعديل الوحدة بالـ AI)"
-                      >
-                        <Stethoscope size={13} />
-                      </button>
-                    )}
+{canEditCourse && (
+                   <button
+                     type="button"
+                     onClick={(e) => {
+                       e.stopPropagation();
+                       openUnitSurgeonModal(sectionName);
+                     }}
+                     className="p-1.5 rounded-lg border bg-slate-900 hover:bg-amber-500 text-amber-400 hover:text-slate-950 border-amber-500/30 transition-all shadow"
+                     title="فتح نافذة جراح هذه الوحدة ومجلس الحكماء"
+                   >
+                     <Stethoscope size="{13}"/>
+                   </button>
+                 )}
 
                     <button
                       type="button"
@@ -3894,6 +4313,16 @@ const applyUpdatedLessonToState = async (updatedLessonObj, reportText = '') => {
                               ✂️ حذف الحشو وتكثيف الدرس
                             </button>
 
+                        <button
+                           type="button"
+                           disabled={isOperatingLesson}
+                           onClick={() => handleOrganizeAndDedupeCurrentLesson(false)}
+                           className="bg-teal-500/20 hover:bg-teal-500 text-teal-200 hover:text-slate-950 border border-teal-500/40 text-xs font-black px-3.5 py-2 rounded-xl transition-all shadow-[0_0_15px_rgba(20,184,166,0.2)]"
+                           title="يرتب الكلمات الأجنبية والعربية المبعثرة في كل الدرس ويحذف أي محادثات أو أقسام مكررة فوراً!"
+                         >
+                           ✨ ترتيب اللغات وحذف المكرر في الدرس (فوري)
+                         </button>
+                          
                             <button
                               type="button"
                               disabled={isAnalyzingLesson}
@@ -4142,36 +4571,49 @@ const applyUpdatedLessonToState = async (updatedLessonObj, reportText = '') => {
                               </h4>
                             )
                           },
-                          p({children}) {
+ p({children}) {
                             const rawText = React.Children.toArray(children)
                               .map(c => (typeof c === 'string' ? c : c?.props?.children || ''))
                               .join('');
+                            
+                            // 1. فحص تمرين "املأ الفراغ" التفاعلي
                             if (rawText.includes('[[') && rawText.includes(']]')) {
                               return <InlineFillBlankSentence rawText={rawText} onSpeak={handlePlayAudioText} />;
                             }
+                            
+                            // 2. فحص أسطر المحادثة والحوارات لإضافة زر الاستماع
+                            const isDialogueLine = /^([A-Za-z\u00C0-\u024F\u0600-\u06FF\s]{2,20}):\s+/.test(rawText) && /[A-Za-z\u00C0-\u024F]/.test(rawText);
+                            const foreignSpeech = isDialogueLine ? extractForeignSpeechFromLine(rawText) : '';
+
+                            if (foreignSpeech) {
+                              return (
+                                <div className="text-[#cbd5e1] text-[16px] md:text-[17px] leading-[2.0] mb-6 font-normal flex items-start justify-between gap-3">
+                                  <div className="flex-1">{children}</div>
+                                  <button
+                                    type="button"
+                                    onClick={() => handlePlayAudioText(foreignSpeech, 0.92, `dlg_p_${foreignSpeech.slice(0, 15)}`)}
+                                    className="shrink-0 mt-1 bg-purple-500/15 hover:bg-purple-600 text-purple-300 hover:text-white px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1 border border-purple-500/30 transition-all"
+                                    title="استمع لنطق هذه العبارة الحوارية"
+                                  >
+                                    <Volume2 size={13} /> اسمع
+                                  </button>
+                                </div>
+                              );
+                            }
+
+                            // 3. فقرة عادية
                             return (
                               <p className="text-[#cbd5e1] text-[16px] md:text-[17px] leading-[2.0] mb-6 font-normal">
                                 {children}
                               </p>
                             );
                           },
-                          strong({children}) {
-                            return (
-                              <strong className="font-semibold text-white bg-slate-800/70 px-1.5 py-0.5 rounded text-[0.96em]">
-                                {children}
-                              </strong>
-                            )
-                          },
-                          ul({children}) {
-                            return <ul className="space-y-3 mb-7 pr-2">{children}</ul>
-                          },
-                          ol({children}) {
-                            return <ol className="list-decimal list-inside space-y-3 mb-7 pr-2 text-[#cbd5e1] text-[16px] md:text-[17px] leading-[1.9]">{children}</ol>
-                          },
+
                           li({children}) {
-                            const rawText = React.Children.toArray(children)
-                              .map(c => (typeof c === 'string' ? c : c?.props?.children || ''))
-                              .join('');
+                            // نستخدم الدالة العميقة لاستخراج النص من القوائم المعقدة
+                            const rawText = extractDeepTextFromReactNode(children).trim();
+                            
+                            // 1. فحص تمرين املأ الفراغ داخل النقاط (Lists)
                             if (rawText.includes('[[') && rawText.includes(']]')) {
                               return (
                                 <li className="list-none my-2">
@@ -4179,13 +4621,31 @@ const applyUpdatedLessonToState = async (updatedLessonObj, reportText = '') => {
                                 </li>
                               );
                             }
+                            
+                            // 2. فحص وجود جمل أجنبية تحتاج لزر نطق صوتي جانبي
+                            const foreignSpeech = extractForeignSpeechFromLine(rawText);
+                            const hasSubstantialForeign = foreignSpeech && foreignSpeech.length >= 4 && !rawText.includes('🔊');
+
                             return (
-                              <li className="text-[#cbd5e1] text-[16px] md:text-[17px] leading-[1.9] flex items-start gap-3">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-3 shrink-0"></span>
-                                <div className="flex-1">{children}</div>
+                              <li className="text-[#cbd5e1] text-[16px] md:text-[17px] leading-[1.9] flex items-start justify-between gap-3 group/li">
+                                <div className="flex items-start gap-3 flex-1">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-3 shrink-0"></span>
+                                  <div className="flex-1">{children}</div>
+                                </div>
+                                {hasSubstantialForeign && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handlePlayAudioText(foreignSpeech, 0.9, `li_spk_${foreignSpeech.slice(0, 15)}`)}
+                                    className="shrink-0 mt-1 opacity-85 group-hover/li:opacity-100 bg-purple-500/15 hover:bg-purple-600 text-purple-300 hover:text-white px-2.5 py-1 rounded-xl text-[11px] font-bold flex items-center gap-1 border border-purple-500/30 transition-all"
+                                    title={`اسمع النطق: ${foreignSpeech}`}
+                                  >
+                                    <Volume2 size={12} /> 🔊
+                                  </button>
+                                )}
                               </li>
                             );
                           },
+             
                           blockquote({children}) {
                             return (
                               <blockquote className="border-r-4 border-amber-500 bg-amber-950/15 py-3.5 px-5 rounded-l-xl my-6 text-slate-300 text-[15.5px] leading-[1.8]">
@@ -5636,8 +6096,609 @@ const applyUpdatedLessonToState = async (updatedLessonObj, reportText = '') => {
           )}
         </div>
       </div>
+
+{/* ===================================================================== */}
+      {/* 🏗️✨ النافذة المنبثقة الفخمة لجراح الوحدة الدراسية (Unit Surgeon Studio Modal) */}
+      {/* ===================================================================== */}
+      {canEditCourse && activeUnitSurgeon && (
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-fade-in" dir="rtl">
+          <div className="bg-[#0b1120] border-2 border-amber-500/50 rounded-3xl max-w-5xl w-full max-h-[90vh] flex flex-col overflow-hidden shadow-[0_0_80px_rgba(245,158,11,0.2)]">
+            
+            {/* ترويسة النافذة */}
+            <div className="p-6 border-b border-slate-800 bg-gradient-to-l from-amber-950/40 via-[#0b1120] to-indigo-950/40 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-400/50 flex items-center justify-center text-amber-300 shrink-0">
+                  <Stethoscope size={24}/>
+                </div>
+                <div>
+                  <span className="text-[11px] font-black text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2.5 py-0.5 rounded-full">
+                    🏗️ استوديو الجراحة المعمارية للوحدة الدراسية
+                  </span>
+                  <h3 className="heading-font text-lg md:text-2xl font-black text-white mt-1">
+                    {activeUnitSurgeon}
+                  </h3>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleDeleteUnit(activeUnitSurgeon)}
+                  className="bg-rose-500/15 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/30 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all"
+                >
+                  <Trash2 size={14}/> حذف الوحدة بالكامل
+                </button>
+                <button
+               type="button"
+               disabled={isOperatingLesson}
+               onClick={() => handleOrganizeAndDedupeUnit(activeUnitSurgeon)}
+               className="bg-teal-500/20 hover:bg-teal-500 text-teal-300 hover:text-slate-950 border border-teal-500/40 px-3.5 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all shadow"
+               title="ترتيب جميع دروس هذه الوحدة وحذف أي دروس أو محادثات مكررة بداخلها"
+             >
+               <Sparkles size={14} /> 🧹 ترتيب الوحدة وحذف المكرر
+             </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveUnitSurgeon(null)}
+                  className="w-10 h-10 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center border border-slate-700"
+                >
+                  <X size={20}/>
+                </button>
+              </div>
+            </div>
+
+            {/* جسم النافذة القابل للتمرير */}
+            <div className="p-6 overflow-y-auto space-y-6 custom-scrollbar">
+              
+              {/* 1. تعديل اسم الوحدة يدوياً */}
+              <div className="bg-slate-950/90 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row items-center gap-3">
+                <span className="text-xs font-bold text-slate-300 shrink-0">✏️ عنوان هذه الوحدة:</span>
+                <input
+                  type="text"
+                  value={editingUnitNameValue}
+                  onChange={(e) => setEditingUnitNameValue(e.target.value)}
+                  className="flex-1 w-full bg-[#060b16] border border-slate-700 focus:border-amber-400 rounded-xl px-4 py-2.5 text-xs sm:text-sm text-white font-bold outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleRenameUnit(activeUnitSurgeon, editingUnitNameValue)}
+                  className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs px-5 py-2.5 rounded-xl shrink-0 transition-all"
+                >
+                  حفظ الاسم الجديد
+                </button>
+              </div>
+
+              {/* 2. قسم إلهام مجلس الحكماء الثلاثي للوحدة */}
+              <div className="bg-gradient-to-br from-indigo-950/30 via-slate-950 to-amber-950/20 border-2 border-indigo-500/40 rounded-2xl p-5 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h4 className="heading-font text-base font-black text-white flex items-center gap-2">
+                      <Sparkles className="text-amber-400" size={18}/> 🧠 إلهام مجلس الحكماء الثلاثي لتطوير هذه الوحدة (الناقد + الأستاذ + التلميذ)
+                    </h4>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      يفحص المجلس دروس هذه الوحدة ويربطها بالوحدة السابقة واللاحقة في الكورس ليقترح عليك أفضل الإضافات:
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {unitInspirationData?.applyAllUnitCommand && (
+                      <button
+                        type="button"
+                        disabled={isOperatingLesson}
+                        onClick={() =>
+                          handleExecuteUnitSurgeon(
+                            activeUnitSurgeon,
+                            lessons.filter(l => l.section === activeUnitSurgeon),
+                            unitInspirationData.applyAllUnitCommand
+                          )
+                        }
+                        className="bg-gradient-to-l from-emerald-500 to-amber-400 hover:from-emerald-400 hover:to-yellow-300 text-slate-950 font-black text-xs px-4 py-2 rounded-xl shadow flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        <Zap size={14}/> 🚀 تطبيق خطة الثلاثي الشاملة للوحدة
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      disabled={isInspiringUnit}
+                      onClick={() => handleInspireUnit(activeUnitSurgeon)}
+                      className="bg-slate-900 hover:bg-slate-800 text-amber-300 border border-amber-500/30 text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5"
+                    >
+                      <RefreshCw className={isInspiringUnit ? 'animate-spin' : ''} size={13} />
+                      {isInspiringUnit ? 'جاري التحليل...' : 'تحديث إلهام الوحدة'}
+                    </button>
+                  </div>
+                </div>
+
+                {isInspiringUnit ? (
+                  <div className="p-6 text-center text-xs font-bold text-indigo-300 animate-pulse bg-slate-950/80 rounded-xl border border-slate-800">
+                    ⏳ مجلس الحكماء يقرأ الآن دروس ({activeUnitSurgeon}) ويقارنها بمسار الكورس ليجهز لك التوصيات المفصلة...
+                  </div>
+                ) : unitInspirationData ? (
+                  <div className="space-y-4">
+                    <div className="bg-slate-950/90 border border-slate-800 p-3.5 rounded-xl space-y-1 text-xs">
+                      <p className="text-slate-200 font-semibold">
+                        🎯 <strong className="text-amber-400">تشخيص الوحدة ({unitInspirationData.unitScore || 92}%):</strong> {unitInspirationData.unitDiagnosis}
+                      </p>
+                      {unitInspirationData.unitBridgeNote && (
+                        <p className="text-indigo-300 text-[11px]">
+                          🔗 <strong>جسر الترابط:</strong> {unitInspirationData.unitBridgeNote}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* بطاقات الثلاثي المفصلة للوحدة */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                      {['rater', 'teacher', 'student'].map((pKey) => {
+                        const pObj = unitInspirationData.personas?.[pKey];
+                        if (!pObj) return null;
+                        return (
+                          <div key={pKey} className="bg-slate-950 border border-slate-800 hover:border-amber-500/50 rounded-2xl p-4 flex flex-col justify-between gap-3 transition-all">
+                            <div className="space-y-2">
+                              <span className="text-[10px] font-black bg-amber-500/15 text-amber-300 border border-amber-500/30 px-2.5 py-0.5 rounded-full">
+                                {pObj.badge}
+                              </span>
+                              <h5 className="font-black text-white text-xs sm:text-sm">{pObj.title}</h5>
+                              <p className="text-[11px] text-slate-300 leading-relaxed">{pObj.diagnosis}</p>
+                              {Array.isArray(pObj.whatItWillChange) && pObj.whatItWillChange.length > 0 && (
+                                <ul className="space-y-1 pt-1 border-t border-slate-800/80 text-[11px] text-emerald-300">
+                                  {pObj.whatItWillChange.map((ch, cIdx) => (
+                                    <li key={cIdx}>✔ {ch}</li>
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-1.5 pt-2">
+                              <button
+                                type="button"
+                                onClick={() => setUnitSurgeonCommand(pObj.command)}
+                                className="flex-1 bg-slate-900 hover:bg-slate-800 text-slate-300 text-[10px] font-bold py-2 px-2 rounded-xl border border-slate-700"
+                              >
+                                ✍️ نسخ للأمر
+                              </button>
+                              <button
+                                type="button"
+                                disabled={isOperatingLesson}
+                                onClick={() =>
+                                  handleExecuteUnitSurgeon(
+                                    activeUnitSurgeon,
+                                    lessons.filter(l => l.section === activeUnitSurgeon),
+                                    pObj.command
+                                  )
+                                }
+                                className="flex-1 bg-amber-500 hover:bg-amber-400 text-slate-950 text-[10px] font-black py-2 px-2 rounded-xl shadow"
+                              >
+                                ⚡ نفّذ الآن
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* دروس جديدة مقترحة للوحدة بضغطة زر */}
+                    {Array.isArray(unitInspirationData.suggestedNewLessons) && unitInspirationData.suggestedNewLessons.length > 0 && (
+                      <div className="space-y-2 pt-2">
+                        <span className="text-xs font-black text-emerald-400 block">
+                          ➕ دروس مقترحة جاهزة للحقن والتأليف الفوري داخل هذه الوحدة:
+                        </span>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {unitInspirationData.suggestedNewLessons.map((sugLes, sIdx) => (
+                            <div key={sIdx} className="bg-slate-950/90 border border-emerald-500/30 rounded-xl p-3.5 flex items-center justify-between gap-3">
+                              <div className="space-y-1">
+                                <p className="text-xs font-black text-white">{sugLes.title}</p>
+                                <p className="text-[11px] text-slate-300">{sugLes.description}</p>
+                                <p className="text-[10px] text-amber-300">💡 {sugLes.whyNeeded}</p>
+                              </div>
+                              <button
+                                type="button"
+                                disabled={isOperatingLesson}
+                                onClick={() => handleAddLessonToUnit(activeUnitSurgeon, sugLes.title, sugLes.description)}
+                                className="shrink-0 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs px-3.5 py-2.5 rounded-xl shadow"
+                              >
+                                + أضف وألّف بالـ AI
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+
+                {/* خانة الأمر الجراحي المخصص للوحدة */}
+                <div className="pt-3 border-t border-slate-800/80 space-y-2">
+                  <label className="text-xs font-bold text-amber-300 block">
+                    🤖 أمر جراحي مخصص لهيكل ودروس هذه الوحدة (يبني محتوى الدروس الجديدة تلقائياً):
+                  </label>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <textarea
+                      value={unitSurgeonCommand}
+                      onChange={(e) => setUnitSurgeonCommand(e.target.value)}
+                      rows={2}
+                      placeholder="اكتب أمرك هنا (مثال: أضف درسين جديدين عن النطق والمحادثة في المقهى ورتب الدروس من الأسهل للأصعب)..."
+                      className="flex-1 bg-slate-950 border border-slate-700 focus:border-amber-400 rounded-xl p-3 text-xs text-white outline-none"
+                    />
+                    <button
+                      type="button"
+                      disabled={isOperatingLesson || !unitSurgeonCommand.trim()}
+                      onClick={() =>
+                        handleExecuteUnitSurgeon(
+                          activeUnitSurgeon,
+                          lessons.filter(l => l.section === activeUnitSurgeon)
+                        )
+                      }
+                      className="bg-gradient-to-l from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-black text-xs px-6 py-3 rounded-xl shrink-0 disabled:opacity-50"
+                    >
+                      {isOperatingLesson ? '⏳ جاري الهندسة والتأليف...' : '⚡ نفّذ على الوحدة بالـ AI'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. إدارة وترتيب الدروس الحالية في الوحدة + إضافة درس جديد */}
+              <div className="bg-slate-950/90 border border-slate-800 rounded-2xl p-5 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h4 className="heading-font text-sm font-black text-white">
+                    📋 قائمة دروس هذه الوحدة الحالية ({lessons.filter(l => l.section === activeUnitSurgeon).length} دروس):
+                  </h4>
+                  <label className="flex items-center gap-2 text-xs text-emerald-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={generateNewLessonWithAI}
+                      onChange={(e) => setGenerateNewLessonWithAI(e.target.checked)}
+                    />
+                    <span>تأليف محتوى وصوتيات أي درس جديد تلقائياً بالـ AI ✨</span>
+                  </label>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="text"
+                    value={newLessonTitleInUnit}
+                    onChange={(e) => setNewLessonTitleInUnit(e.target.value)}
+                    placeholder="اكتب عنوان درس جديد لإضافته وتأليفه داخل هذه الوحدة..."
+                    className="flex-1 bg-[#060b16] border border-slate-700 focus:border-emerald-400 rounded-xl px-4 py-2.5 text-xs text-white outline-none"
+                  />
+                  <button
+                    type="button"
+                    disabled={isOperatingLesson}
+                    onClick={() => handleAddLessonToUnit(activeUnitSurgeon)}
+                    className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs px-5 py-2.5 rounded-xl flex items-center justify-center gap-1.5 shrink-0"
+                  >
+                    <Plus size={15}/> {generateNewLessonWithAI ? 'إضافة وتأليف الدرس بالـ AI' : 'إضافة درس جديد'}
+                  </button>
+                </div>
+
+                <div className="space-y-2 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
+                  {lessons
+                    .filter(l => l.section === activeUnitSurgeon)
+                    .map((les, idx, arr) => (
+                      <div key={les._id} className="bg-[#060b16] border border-slate-800 rounded-xl p-3 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 overflow-hidden">
+                          <span className="w-6 h-6 rounded-lg bg-slate-900 border border-slate-700 text-amber-400 font-black text-xs flex items-center justify-center shrink-0">
+                            {idx + 1}
+                          </span>
+                          <div className="truncate">
+                            <p className="text-xs font-bold text-white truncate">{les.title}</p>
+                            <p className="text-[10px] text-slate-400 truncate">{cleanLessonDesc(les.description)}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            disabled={idx === 0}
+                            onClick={() => handleMoveLessonInUnit(activeUnitSurgeon, les._id, 'up')}
+                            className="bg-slate-900 hover:bg-slate-800 text-slate-300 px-2 py-1 rounded text-xs disabled:opacity-30"
+                            title="تحريك لأعلى"
+                          >
+                            ▲
+                          </button>
+                          <button
+                            type="button"
+                            disabled={idx === arr.length - 1}
+                            onClick={() => handleMoveLessonInUnit(activeUnitSurgeon, les._id, 'down')}
+                            className="bg-slate-900 hover:bg-slate-800 text-slate-300 px-2 py-1 rounded text-xs disabled:opacity-30"
+                            title="تحريك لأسفل"
+                          >
+                            ▼
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveLesson(les);
+                              setActiveUnitSurgeon(null);
+                            }}
+                            className="bg-indigo-500/20 hover:bg-indigo-600 text-indigo-300 hover:text-white px-2.5 py-1 rounded-lg text-[11px] font-bold"
+                          >
+                            فتح الدرس
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSingleLessonFromUnit(les._id, les.title)}
+                            className="bg-rose-500/20 hover:bg-rose-600 text-rose-300 hover:text-white px-2 py-1 rounded-lg text-[11px] font-bold"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===================================================================== */}
+      {/* 🌍✨ النافذة المنبثقة الفخمة لجراح الكورس الشامل (Course Surgeon Studio Modal) */}
+      {/* ===================================================================== */}
+      {canEditCourse && isCourseSurgeonOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-fade-in" dir="rtl">
+          <div className="bg-[#0b1120] border-2 border-amber-500/50 rounded-3xl max-w-6xl w-full max-h-[90vh] flex flex-col overflow-hidden shadow-[0_0_90px_rgba(245,158,11,0.25)]">
+            
+            {/* ترويسة نافذة جراح الكورس */}
+            <div className="p-6 border-b border-slate-800 bg-gradient-to-l from-amber-950/45 via-[#0b1120] to-purple-950/40 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-400/50 flex items-center justify-center text-amber-300 shrink-0">
+                  <Layers size={24}/>
+                </div>
+                <div>
+                  <span className="text-[11px] font-black text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2.5 py-0.5 rounded-full">
+                    🌍 غرفة القيادة المعمارية وجراح الكورس الشامل (Course Blueprint Studio)
+                  </span>
+                  <h3 className="heading-font text-lg md:text-2xl font-black text-white mt-1">
+                    {course?.title}
+                  </h3>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsCourseSurgeonOpen(false)}
+                className="w-10 h-10 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center border border-slate-700"
+              >
+                <X size={20}/>
+              </button>
+
+              <div className="flex items-center gap-2">
+             <button
+               type="button"
+               disabled={isOperatingLesson}
+               onClick={handleOrganizeAndDedupeFullCourse}
+               className="bg-teal-500/20 hover:bg-teal-500 text-teal-300 hover:text-slate-950 border border-teal-500/40 px-4 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all shadow-[0_0_20px_rgba(20,184,166,0.25)]"
+               title="ترتيب جميع وحدات ودروس الكورس بالكامل وحذف أي وحدات أو دروس أو محادثات مكررة"
+             >
+               <Sparkles size={15} /> 🧹 ترتيب الكورس بالكامل وحذف المكرر
+             </button>
+             <button
+               type="button"
+               onClick={() => setIsCourseSurgeonOpen(false)}
+               className="w-10 h-10 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center border border-slate-700"
+             >
+               <X size={20}/>
+             </button>
+           </div>
+           
+            </div>
+
+            {/* جسم نافذة جراح الكورس */}
+            <div className="p-6 overflow-y-auto space-y-6 custom-scrollbar">
+              
+              {/* 1. مجلس الحكماء الثلاثي لهندسة الكورس */}
+              <div className="bg-gradient-to-br from-amber-950/25 via-slate-950 to-indigo-950/30 border-2 border-amber-500/40 rounded-2xl p-5 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h4 className="heading-font text-base font-black text-white flex items-center gap-2">
+                      <Sparkles className="text-amber-400" size={18}/> 🧠 التوصيات الاستراتيجية لمجلس الحكماء الثلاثي لهيكل الكورس بالكامل
+                    </h4>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      يفحص المجلس جميع وحدات الكورس الحالية ويقترح الوحدات التكميلية والجسور التي ترفع جودة الكورس إلى 100%:
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {courseInspirationData?.applyAllCourseCommand && (
+                      <button
+                        type="button"
+                        disabled={isOperatingLesson}
+                        onClick={() => handleExecuteCourseSurgeon(courseInspirationData.applyAllCourseCommand)}
+                        className="bg-gradient-to-l from-emerald-500 to-amber-400 hover:from-emerald-400 hover:to-yellow-300 text-slate-950 font-black text-xs px-4 py-2 rounded-xl shadow flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        <Zap size={14}/> 🚀 تطبيق الترقية المعمارية الشاملة للكورس
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      disabled={isInspiringCourse}
+                      onClick={handleInspireCourse}
+                      className="bg-slate-900 hover:bg-slate-800 text-amber-300 border border-amber-500/30 text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5"
+                    >
+                      <RefreshCw className={isInspiringCourse ? 'animate-spin' : ''} size={13} />
+                      {isInspiringCourse ? 'جاري فحص الكورس...' : 'إعادة فحص هيكل الكورس'}
+                    </button>
+                  </div>
+                </div>
+
+                {isInspiringCourse ? (
+                  <div className="p-6 text-center text-xs font-bold text-amber-300 animate-pulse bg-slate-950/80 rounded-xl border border-slate-800">
+                    ⏳ المجلس الأعلى للمناهج يفحص الآن جميع وحدات ({course?.title}) ودروسها ليقدم لك خطة التطوير المترابطة...
+                  </div>
+                ) : courseInspirationData ? (
+                  <div className="space-y-4">
+                    <div className="bg-slate-950/90 border border-slate-800 p-3.5 rounded-xl flex items-center justify-between flex-wrap gap-2 text-xs">
+                      <span className="text-slate-200 font-semibold">
+                        🏛️ <strong className="text-amber-400">التشخيص المعماري للكورس:</strong> {courseInspirationData.architecturalVerdict}
+                      </span>
+                      <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-3 py-1 rounded-full font-black">
+                        تكامل المنهج: {courseInspirationData.courseQualityScore || 94}%
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                      {['rater', 'teacher', 'student'].map((pKey) => {
+                        const pObj = courseInspirationData.personas?.[pKey];
+                        if (!pObj) return null;
+                        return (
+                          <div key={pKey} className="bg-slate-950 border border-slate-800 hover:border-amber-500/50 rounded-2xl p-4 flex flex-col justify-between gap-3 transition-all">
+                            <div className="space-y-2">
+                              <span className="text-[10px] font-black bg-amber-500/15 text-amber-300 border border-amber-500/30 px-2.5 py-0.5 rounded-full">
+                                {pObj.badge}
+                              </span>
+                              <h5 className="font-black text-white text-xs sm:text-sm">{pObj.title}</h5>
+                              <p className="text-[11px] text-slate-300 leading-relaxed">{pObj.diagnosis}</p>
+                              {Array.isArray(pObj.proposedChanges) && pObj.proposedChanges.length > 0 && (
+                                <ul className="space-y-1 pt-1 border-t border-slate-800/80 text-[11px] text-emerald-300">
+                                  {pObj.proposedChanges.map((ch, cIdx) => (
+                                    <li key={cIdx}>✔ {ch}</li>
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-1.5 pt-2">
+                              <button
+                                type="button"
+                                onClick={() => setCourseSurgeonCommand(pObj.command)}
+                                className="flex-1 bg-slate-900 hover:bg-slate-800 text-slate-300 text-[10px] font-bold py-2 px-2 rounded-xl border border-slate-700"
+                              >
+                                ✍️ نسخ للأمر
+                              </button>
+                              <button
+                                type="button"
+                                disabled={isOperatingLesson}
+                                onClick={() => handleExecuteCourseSurgeon(pObj.command)}
+                                className="flex-1 bg-amber-500 hover:bg-amber-400 text-slate-950 text-[10px] font-black py-2 px-2 rounded-xl shadow"
+                              >
+                                ⚡ طبّق على الكورس
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* وحدات مقترحة كاملة جاهزة للإضافة بضغطة زر */}
+                    {Array.isArray(courseInspirationData.suggestedNewUnits) && courseInspirationData.suggestedNewUnits.length > 0 && (
+                      <div className="space-y-2 pt-2">
+                        <span className="text-xs font-black text-emerald-400 block">
+                          ➕ وحدات دراسية مقترحة جاهزة للتأليف والحقن في الكورس (بدروسها الكاملة):
+                        </span>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {courseInspirationData.suggestedNewUnits.map((sugU, uIdx) => (
+                            <div key={uIdx} className="bg-slate-950/90 border border-emerald-500/30 rounded-xl p-4 flex flex-col justify-between gap-3">
+                              <div className="space-y-1.5">
+                                <p className="text-xs sm:text-sm font-black text-white">{sugU.sectionName}</p>
+                                <p className="text-[11px] text-amber-300">💡 {sugU.whyNeeded}</p>
+                                {Array.isArray(sugU.proposedLessons) && (
+                                  <div className="text-[11px] text-slate-300 space-y-0.5 pt-1">
+                                    {sugU.proposedLessons.map((pl, pIdx) => (
+                                      <p key={pIdx}>• {pl}</p>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                disabled={isOperatingLesson}
+                                onClick={() => handleAddNewUnitToCourse(sugU.sectionName, sugU.proposedLessons)}
+                                className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs py-2.5 rounded-xl shadow"
+                              >
+                                + أضف هذه الوحدة وألّف دروسها بالـ AI الآن
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+
+                {/* أمر جراحي مخصص للكورس */}
+                <div className="pt-3 border-t border-slate-800/80 space-y-2">
+                  <label className="text-xs font-bold text-amber-300 block">
+                    🤖 أمر جراحي مخصص لهيكل الكورس بالكامل:
+                  </label>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <textarea
+                      value={courseSurgeonCommand}
+                      onChange={(e) => setCourseSurgeonCommand(e.target.value)}
+                      rows={2}
+                      placeholder="مثال: أضف وحدة جديدة عن المحادثة في المطار والفندق قبل الوحدة الأخيرة مع 4 دروس كاملة..."
+                      className="flex-1 bg-slate-950 border border-slate-700 focus:border-amber-400 rounded-xl p-3 text-xs text-white outline-none"
+                    />
+                    <button
+                      type="button"
+                      disabled={isOperatingLesson || !courseSurgeonCommand.trim()}
+                      onClick={() => handleExecuteCourseSurgeon()}
+                      className="bg-gradient-to-l from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-black text-xs px-6 py-3 rounded-xl shrink-0 disabled:opacity-50"
+                    >
+                      {isOperatingLesson ? '⏳ جاري هندسة الكورس...' : '⚡ نفّذ على هيكل الكورس'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. خريطة وحدات الكورس الحالية + إضافة وحدة جديدة */}
+              <div className="bg-slate-950/90 border border-slate-800 rounded-2xl p-5 space-y-4">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <h4 className="heading-font text-sm font-black text-white">
+                    🗂️ خريطة وحدات الكورس الحالية ({Object.keys(groupedLessons).length} وحدات):
+                  </h4>
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <input
+                      type="text"
+                      value={newUnitNameInput}
+                      onChange={(e) => setNewUnitNameInput(e.target.value)}
+                      placeholder="اسم وحدة جديدة لإضافتها..."
+                      className="flex-1 sm:w-72 bg-[#060b16] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleAddNewUnitToCourse()}
+                      className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs px-4 py-2 rounded-xl flex items-center gap-1 shrink-0"
+                    >
+                      <Plus size="{14}"/> إضافة وحدة
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {Object.entries(groupedLessons).map(([secName, secLessons], idx) => (
+                    <div key={idx} className="bg-[#060b16] border border-slate-800 hover:border-indigo-500/40 rounded-xl p-4 flex items-center justify-between gap-3">
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-black text-indigo-400">الوحدة {idx + 1} ({secLessons.length} دروس)</span>
+                        <h5 className="text-xs font-bold text-white">{secName}</h5>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsCourseSurgeonOpen(false);
+                            openUnitSurgeonModal(secName);
+                          }}
+                          className="bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/30 px-3 py-1.5 rounded-lg text-[11px] font-black flex items-center gap-1 transition-all"
+                        >
+                          <Stethoscope size="{12}"/> جراحة الوحدة
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
+
+      
     </div>
+    
   );
 };
+
 
 export default Classroom;
