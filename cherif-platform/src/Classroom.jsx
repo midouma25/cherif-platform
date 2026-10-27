@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 
 // ============================================================================
-// 🎨 0. قاموس الصور الذهنية التلقائي متعدد اللغات (Visual Emoji Anchors)
+// 🎨 0. قاموس الصور الذهنية التلقائي متعدد اللغات (Visual Emoji Anchors - 7 Languages)
 // ============================================================================
 const WORD_EMOJI_MAP = {
   // English
@@ -27,17 +27,23 @@ const WORD_EMOJI_MAP = {
   man: '👨', chin: '🧔', run: '🏃', sit: '🪑', chat: '🐱', math: '🔢', thin: '📏', big: '🐘',
   eat: '🍽️', drink: '🥤', sleep: '😴', walk: '🚶',
   // French (Français)
-  chien: '🐕', oiseau: '🐦', poisson: '🐟', cheval: '🐴',
+  chien: '🐕', oiseau: '🐦', poisson: '🐟', cheval: '🐴', souris: '🐭',
   pomme: '🍎', pain: '🥖', croissant: '🥐', eau: '💧', café: '☕', lait: '🥛', fromage: '🧀',
   lit: '🛏️', table: '🪑', chaise: '🪑', maison: '🏠', école: '🏫', porte: '🚪', fenêtre: '🪟',
   livre: '📖', stylo: '🖊️', sac: '🎒', chapeau: '🎩', voiture: '🚗', bateau: '⛵', train: '🚆',
   soleil: '☀️', lune: '🌙', feu: '🔥', fleur: '🌸', arbre: '🌳', jardin: '🏡',
   garçon: '👦', fille: '👧', homme: '👨', femme: '👩', maman: '👩', père: '👨', ami: '🤝',
   rouge: '🔴', bleu: '🔵', vert: '🟢', bonjour: '👋', salut: '👋', merci: '🙏',
-  // Spanish & German & Japanese Common
+  // Spanish & German
   gato: '🐱', perro: '🐕', casa: '🏠', libro: '📖', agua: '💧', mesa: '🪑',
   katze: '🐱', hund: '🐕', buch: '📖', wasser: '💧', haus: '🏠', tisch: '🪑', apfel: '🍎',
-  ねこ: '🐱', いぬ: '🐕', みず: '💧', ほん: '📖', りんご: '🍎', さくら: '🌸'
+  // Japanese (日本語)
+  ねこ: '🐱', 猫: '🐱', いぬ: '🐕', 犬: '🐕', みず: '💧', 水: '💧', ほん: '📖', 本: '📖',
+  りんご: '🍎', さくら: '🌸', くるま: '🚗', 車: '🚗', いえ: '🏠', 家: '🏠', たべる: '🍱', 食べる: '🍱',
+  // Chinese (中文)
+  猫: '🐱', 狗: '🐕', 水: '💧', 书: '📖', 苹果: '🍎', 茶: '🍵', 咖啡: '☕', 家: '🏠', 你好: '👋', 谢谢: '🙏',
+  // Korean (한국어)
+  고양이: '🐱', 개: '🐕', 강아지: '🐶', 물: '💧', 책: '📖', 사과: '🍎', 커피: '☕', 집: '🏠', 학교: '🏫', 안녕: '👋', 감사합니다: '🙏'
 };
 
 const getEmojiForText = (text = '') => {
@@ -49,32 +55,31 @@ const getEmojiForText = (text = '') => {
 };
 
 // ============================================================================
-// 🌍 0.2 كاشف اللغة الصوتي الذكي (يكتشف لغة الكورس أو النص تلقائياً)
+// 🌍 0.2 كاشف اللغة الصوتي الذكي (يدعم 7 لغات عالمية: أوروبية + آسيوية)
 // ============================================================================
 const resolveLanguageConfig = (contextStr = '', sampleText = '') => {
   const combined = `${contextStr} ${sampleText}`.toLowerCase();
 
-  if (/[\u3040-\u30ff]/.test(sampleText) || /يابان|japanese|日本語|jlpt|هيراغانا|كاتاكانا|كانجي/i.test(combined)) {
-    return { code: 'ja-JP', nameAr: 'اليابانية', nameEn: 'Japanese', flag: '🇯🇵' };
+  if (/[\uac00-\ud7af\u1100-\u11ff]/.test(sampleText) || /كوري|korean|한국어|topik|hangul|هانغول/i.test(combined)) {
+    return { code: 'ko-KR', nameAr: 'الكورية', nameEn: 'Korean', flag: '🇰🇷', family: 'east_asian' };
   }
-  if (/[\u4e00-\u9faf]/.test(sampleText) && /صين|mandarin|chinese|中文|hsk|pinyin/i.test(combined)) {
-    return { code: 'zh-CN', nameAr: 'الصينية', nameEn: 'Chinese', flag: '🇨🇳' };
+  if (/[\u3040-\u30ff]/.test(sampleText) || /يابان|japanese|日本語|jlpt|هيراغانا|كاتاكانا|كانجي/i.test(combined)) {
+    return { code: 'ja-JP', nameAr: 'اليابانية', nameEn: 'Japanese', flag: '🇯🇵', family: 'east_asian' };
+  }
+  if ((/[\u4e00-\u9faf]/.test(sampleText) && !/[\u3040-\u30ff]/.test(sampleText)) || /صين|mandarin|chinese|中文|hsk|pinyin/i.test(combined)) {
+    return { code: 'zh-CN', nameAr: 'الصينية', nameEn: 'Chinese', flag: '🇨🇳', family: 'east_asian' };
   }
   if (/فرنس|french|français|delf|dalf|أصوات أنفية|liaison|c'est|est-ce que|bonjour/i.test(combined)) {
-    return { code: 'fr-FR', nameAr: 'الفرنسية', nameEn: 'French', flag: '🇫🇷' };
+    return { code: 'fr-FR', nameAr: 'الفرنسية', nameEn: 'French', flag: '🇫🇷', family: 'european' };
   }
   if (/ألمان|المان|german|deutsch|goethe|testdaf|umlaut|das ist|guten tag/i.test(combined)) {
-    return { code: 'de-DE', nameAr: 'الألمانية', nameEn: 'German', flag: '🇩🇪' };
+    return { code: 'de-DE', nameAr: 'الألمانية', nameEn: 'German', flag: '🇩🇪', family: 'european' };
   }
   if (/إسبان|اسبان|spanish|español|dele|siele|buenos días|¿/i.test(combined)) {
-    return { code: 'es-ES', nameAr: 'الإسبانية', nameEn: 'Spanish', flag: '🇪🇸' };
+    return { code: 'es-ES', nameAr: 'الإسبانية', nameEn: 'Spanish', flag: '🇪🇸', family: 'european' };
   }
-  if (/صين|mandarin|chinese|中文|hsk|pinyin/i.test(combined)) {
-    return { code: 'zh-CN', nameAr: 'الصينية', nameEn: 'Chinese', flag: '🇨🇳' };
-  }
-  return { code: 'en-US', nameAr: 'الإنجليزية', nameEn: 'English', flag: '🇬🇧' };
+  return { code: 'en-US', nameAr: 'الإنجليزية', nameEn: 'English', flag: '🇬🇧', family: 'european' };
 };
-
 
 // ============================================================================
 // 🧹 0.5 محرك التطهير، ترتيب اللغات (BiDi Fixer)، ومنع التكرار التلقائي الشامل
@@ -96,11 +101,10 @@ const sanitizeLessonMarkdown = (raw = '', stripRawPromptSection = false) => {
     .replace(/---;/g, '---')
     .replace(/🔊\s*IPA:\s*\/([\u0600-\u06FF\s]+)\//g, '🔊 النطق: /$1/');
 
-  // 🔗 1. علاج جذري لمشكلة تبعثر الكلمات الأجنبية في الأسطر العربية (كما في الصورة):
-  // يدمج الكلمات الأجنبية المتجاورة المقطعة بـ backticks مثل: `Oui` , `c'est un` `stylo` -> `Oui, c'est un stylo`
+  // 🔗 1. دمج الكلمات الأجنبية المتجاورة المقطعة بـ backticks في كبسولة واحدة
   for (let pass = 0; pass < 4; pass++) {
     cleaned = cleaned.replace(
-      /`([^\u0600-\u06FF`\n]{1,45})`\s*([,.;:?!'’+-]?)\s*`([^\u0600-\u06FF`\n]{1,45})`/g,
+      /`([^\u0600-\u06FF`\n]{1,55})`\s*([,.;:?!'’+-]?)\s*`([^\u0600-\u06FF`\n]{1,55})`/g,
       (_, part1, sep, part2) => {
         const cleanSep = sep ? `${sep} ` : ' ';
         return `\`${part1.trim()}${cleanSep}${part2.trim()}\``.replace(/\s+/g, ' ');
@@ -108,7 +112,7 @@ const sanitizeLessonMarkdown = (raw = '', stripRawPromptSection = false) => {
     );
   }
 
-  // 🎯 2. ترتيب صيغة [Liaison: ...] أو المعادلات المختلطة لكي لا تنكسر بين السطور
+  // 🎯 2. ترتيب صيغة [Liaison: ...] أو المعادلات المختلطة
   cleaned = cleaned.replace(
     /\[\s*Liaison\s*:\s*`?([^`\]=]+)`?\s*\+\s*`?([^`\]=]+)`?\s*=\s*([^\]]+)\]/gi,
     '🎧 **[الربط الصوتي Liaison:** `$1 + $2` ⬅️ **$3]**'
@@ -120,12 +124,11 @@ const sanitizeLessonMarkdown = (raw = '', stripRawPromptSection = false) => {
   return cleaned;
 };
 
-// 🧼 دالة الترتيب اللغوي الفوري وحذف الأسطر والعناصر المكررة داخل أي نص Markdown (للشريحة أو الدرس)
+// 🧼 دالة الترتيب اللغوي الفوري وحذف الأسطر والعناصر المكررة داخل أي نص Markdown
 const formatAndDeduplicateMarkdown = (rawMarkdown = '') => {
   if (!rawMarkdown) return '';
   const sanitized = sanitizeLessonMarkdown(rawMarkdown, false);
 
-  // تقسيم إلى أقسام فرعية لحذف الأقسام المكررة (مثل تكرار محادثة أو تكرار رادار الأخطاء)
   const rawBlocks = sanitized.split(/(?=\n###\s+|\n##\s+)/g).map(b => b.trim()).filter(Boolean);
   const uniqueBlocks = [];
   const seenBlockSignatures = new Set();
@@ -133,23 +136,18 @@ const formatAndDeduplicateMarkdown = (rawMarkdown = '') => {
   rawBlocks.forEach(block => {
     const lines = block.split('\n');
     const heading = (lines[0] || '').replace(/^[#*-\s]+/, '').trim().toLowerCase();
-    // تنظيف الأسطر الداخلية من التكرار الحرفي
     const dedupedLines = [];
     const seenLines = new Set();
 
     lines.forEach(line => {
       const trimmed = line.trim();
-      // إصلاح أسطر المحادثات مثل "• Marie: `Oui, c'est un stylo.` (وي...)" لتكون مرتبة تماماً
       let formattedLine = line.replace(
-        /^(\s*[-*•]?\s*)\*\*?([A-Za-z\u00C0-\u024F\u0600-\u06FF\s]{2,18})\*\*?\s*:\s*/u,
+        /^(\s*[-*•]?\s*)\*\*?([A-Za-z\u00C0-\u024F\u0600-\u06FF\u3040-\u30ff\u4e00-\u9faf\uac00-\ud7af\s]{2,18})\*\*?\s*:\s*/u,
         '$1🗣️ **$2:** '
       );
 
-      const lineNormalized = trimmed
-        .replace(/[^\p{L}\p{N}]/gu, '')
-        .toLowerCase();
+      const lineNormalized = trimmed.replace(/[^\p{L}\p{N}]/gu, '').toLowerCase();
 
-      // السماح بفواصل الجداول والأسطر الفارغة، ومنع تكرار نفس الجملة أو المثال مرتين في نفس القسم
       if (
         !trimmed ||
         trimmed.startsWith('---') ||
@@ -176,27 +174,83 @@ const formatAndDeduplicateMarkdown = (rawMarkdown = '') => {
   return uniqueBlocks.join('\n\n');
 };
 
-
-// 🎨 كاشف الجنس النحوي التلقائي لتلوين الكلمات المذكرة (🔵) والمؤنثة (🔴)
+// 🎨 كاشف الشارات النحوية الذكي (مذكر 🔵 / مؤنث 🔴 / محايد ألماني 🟢 / أدوات آسيوية 🎌🏮🇰🇷)
 const detectGrammaticalGenderBadge = (text = '') => {
   const trimmed = (text || '').trim().toLowerCase();
-  if (/^(un|le|du|mon|ton|son|ce|cet|el|un|der|ein)\s+/i.test(trimmed) || trimmed.includes('🔵')) {
+  if (/^(das)\s+/i.test(trimmed) || trimmed.includes('🟢')) {
+    return { type: 'neut', label: '🟢 محايد (das)', classes: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' };
+  }
+  if (/^(un|le|du|mon|ton|son|ce|cet|el|der|ein)\s+/i.test(trimmed) || trimmed.includes('🔵')) {
     return { type: 'masc', label: '🔵 مذكر', classes: 'bg-sky-500/15 text-sky-300 border-sky-500/30' };
   }
   if (/^(une|la|de la|ma|ta|sa|cette|una|die|eine)\s+/i.test(trimmed) || trimmed.includes('🔴')) {
     return { type: 'fem', label: '🔴 مؤنث', classes: 'bg-rose-500/15 text-rose-300 border-rose-500/30' };
   }
+  if (/です|ます/.test(trimmed)) {
+    return { type: 'jp_polite', label: '🎌 صيغة مهذبة', classes: 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30' };
+  }
+  if (/요|습니다|입니다/.test(trimmed)) {
+    return { type: 'kr_polite', label: '🇰🇷 صيغة احترام', classes: 'bg-purple-500/15 text-purple-300 border-purple-500/30' };
+  }
   return null;
 };
 
-
 // ============================================================================
-// 🔬 0.8 محرك الأشعة الصوتية (X-Ray Phonics) لكشف الحروف الصامتة والوصل الصوتي بصرياً
+// 🔬 0.8 محرك الأشعة الصوتية الشامل لـ 7 لغات (X-Ray Phonics & Grammar Particles V7)
+// يكشف: الحروف الصامتة 🔇، الوصل الصوتي ‿، الأدوات اليابانية والكورية، والنغمات الصينية!
 // ============================================================================
 const renderXRayForeignWord = (rawText = '', enabled = true) => {
   if (!enabled || !rawText || typeof rawText !== 'string') return rawText;
 
-  // تقسيم الجملة إلى كلمات مع الحفاظ على المسافات وعلامات الوصل ‿
+  // 1. إذا كان النص يحتوي على حروف يابانية (إبراز الأدوات النحوية Particles والشدة っ)
+  if (/[\u3040-\u30ff]/.test(rawText)) {
+    const jpParts = rawText.split(/(\s+|[はがをにでへのもか]|っ)/g);
+    return jpParts.map((part, i) => {
+      if (/^[はがをにでへのもか]$/.test(part)) {
+        return (
+          <span
+            key={i}
+            className="text-amber-300 font-black underline decoration-amber-400/70 px-[1px]"
+            title="أداة ربط نحوية يابانية (Particle 助詞)"
+          >
+            {part}
+          </span>
+        );
+      }
+      if (part === 'っ') {
+        return (
+          <span key={i} className="text-rose-400 font-black" title="شدة صوتية يابانية (وقفة قصيرة Sokuon)">
+            っ
+          </span>
+        );
+      }
+      return <React.Fragment key={i}>{part}</React.Fragment>;
+    });
+  }
+
+  // 2. إذا كان النص يحتوي على حروف هانغول كورية (إبراز أدوات الموضوع/المفعول ونهايات الاحترام)
+  if (/[\uac00-\ud7af]/.test(rawText)) {
+    const krParts = rawText.split(/(\s+|(?:은|는|이|가|을|를|에|에서|어요|아요|해요|습니다|입니다|예요|이에요)(?=\s|[.,?!]|$))/g);
+    return krParts.map((part, i) => {
+      if (/^(은|는|이|가|을|를|에|에서)$/.test(part)) {
+        return (
+          <span key={i} className="text-amber-300 font-black underline decoration-amber-400/70" title="أداة نحوية كورية (Particle)">
+            {part}
+          </span>
+        );
+      }
+      if (/^(어요|아요|해요|습니다|입니다|예요|이에요)$/.test(part)) {
+        return (
+          <span key={i} className="text-sky-300 font-black" title="نهاية الفعل المهذبة في الكورية">
+            {part}
+          </span>
+        );
+      }
+      return <React.Fragment key={i}>{part}</React.Fragment>;
+    });
+  }
+
+  // 3. اللغات اللاتينية والبينين (كشف الوصل ‿ + الحروف الصامتة النهائية + علامات النبر ˈ)
   const tokens = rawText.split(/(\s+|‿)/g);
 
   return tokens.map((tok, idx) => {
@@ -205,7 +259,7 @@ const renderXRayForeignWord = (rawText = '', enabled = true) => {
         <span
           key={idx}
           className="text-amber-400 font-black px-0.5 drop-shadow-[0_0_8px_rgba(245,158,11,0.8)]"
-          title="وصل صوتي (Liaison): اربط الحرف الساكن بالكلمة التي تليه"
+          title="وصل صوتي (Liaison): اربط الحرف الساكن بالكلمة التي تليه ككلمة واحدة"
         >
           ‿
         </span>
@@ -213,10 +267,9 @@ const renderXRayForeignWord = (rawText = '', enabled = true) => {
     }
 
     const cleanWord = tok.replace(/[.,?!;:'"()]/g, '').toLowerCase();
-    // الكلمات الفرنسية الشائعة التي تنتهي بحرف صامت (t, s, d, x, p, z, e)
     const silentEndMatch =
       cleanWord.length >= 3 &&
-      !/^(un|une|le|la|de|du|je|tu|il|on|ou|et|qui|roi|loi|moi|toi|soi|eau|feu|bleu|vœu|jeu)$/i.test(cleanWord) &&
+      !/^(un|une|le|la|de|du|je|tu|il|on|ou|et|qui|roi|loi|moi|toi|soi|eau|feu|bleu|vœu|jeu|bus|fils|ours|sens|gaz)$/i.test(cleanWord) &&
       tok.match(/^([A-Za-z\u00C0-\u024F]{2,}?)([tsdxze])([.,?!;:]*)$/i);
 
     if (silentEndMatch) {
@@ -240,7 +293,7 @@ const renderXRayForeignWord = (rawText = '', enabled = true) => {
 };
 
 // ============================================================================
-// 👄 0.9 مستخرج بطاقات تشريح الفم والصوت من جداول الـ Markdown (Visual Mouth Cards)
+// 👄 0.9 مستخرج بطاقات تشريح الفم، النغمات، والأدوات من جداول الـ Markdown
 // ============================================================================
 const extractVocabularyTableCards = (markdown = '') => {
   if (!markdown || !markdown.includes('|')) return [];
@@ -262,21 +315,30 @@ const extractVocabularyTableCards = (markdown = '') => {
       const mouthMovement = cols[3] || '';
       const meaning = cols[4] || cols[3] || '';
 
-      if (word && !/[\u0600-\u06FF]/.test(word.split('(')[0])) {
-        let mouthBadge = { icon: '👄', label: 'مخرج فموي متوازن', color: 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30' };
-        if (/أنف|خيشوم|nasal/i.test(mouthMovement + meaning)) {
+      if (word && !/^[\u0600-\u06FF\s]+$/.test(word.split('(')[0])) {
+        let mouthBadge = { icon: '👄', label: 'مخرج صوتي متوازن', color: 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30' };
+        const combinedMeta = `${mouthMovement} ${ipa} ${meaning}`;
+
+        if (/نغمة|tone|جذر|radical|قياس|measure/i.test(combinedMeta)) {
+          mouthBadge = { icon: '🏮', label: 'نغمة وجذر تصويري', color: 'bg-rose-500/15 text-rose-300 border-rose-500/30' };
+        } else if (/batchim|مقطع|احترام|받침/i.test(combinedMeta)) {
+          mouthBadge = { icon: '🇰🇷', label: 'مكعب هانغول و Batchim', color: 'bg-purple-500/15 text-purple-300 border-purple-500/30' };
+        } else if (/particle|أداة|كانجي|kanji/i.test(combinedMeta)) {
+          mouthBadge = { icon: '🎌', label: 'أداة نحوية ونبر ياباني', color: 'bg-amber-500/15 text-amber-300 border-amber-500/30' };
+        } else if (/أنف|خيشوم|nasal/i.test(combinedMeta)) {
           mouthBadge = { icon: '👃', label: 'رنين أنفي (هواء من الأنف)', color: 'bg-amber-500/15 text-amber-300 border-amber-500/30' };
-        } else if (/ضم|مستدير|دائر|مدور/i.test(mouthMovement)) {
+        } else if (/ضم|مستدير|دائر|مدور/i.test(combinedMeta)) {
           mouthBadge = { icon: '⭕', label: 'ضم واستدارة الشفاه للأمام', color: 'bg-sky-500/15 text-sky-300 border-sky-500/30' };
-        } else if (/ابتسام|مبتسم|شد|عريض/i.test(mouthMovement)) {
+        } else if (/ابتسام|مبتسم|شد|عريض/i.test(combinedMeta)) {
           mouthBadge = { icon: '↔️', label: 'شد الشفاه بابتسامة خفيفة', color: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' };
-        } else if (/فتح|واسع|أسفل/i.test(mouthMovement)) {
+        } else if (/فتح|واسع|أسفل/i.test(combinedMeta)) {
           mouthBadge = { icon: '😮', label: 'فتح الفك السفلي باسترخاء', color: 'bg-purple-500/15 text-purple-300 border-purple-500/30' };
         }
 
         cards.push({
           word: word.trim(),
-          emoji: getEmojiForText(word),
+          cleanSpeakableWord: word.split('(')[0].replace(/🔵|🔴|🟢/g, '').trim(),
+          emoji: getEmojiForText(word + ' ' + meaning),
           gender: detectGrammaticalGenderBadge(word + ' ' + meaning),
           ipa: ipa.trim(),
           arabicApprox: arabicApprox.trim(),
@@ -289,6 +351,9 @@ const extractVocabularyTableCards = (markdown = '') => {
   });
   return cards;
 };
+
+
+
 // ============================================================================
 // 🎧 1. محلل استوديو الاستماع والترديد (يدعم جميع اللغات)
 // ============================================================================
@@ -467,14 +532,48 @@ const extractDeepTextFromReactNode = (node) => {
   return '';
 };
 
-// 🗣️ مستخرج الجملة الأجنبية الصافية من أي سطر حواري أو مثال لتشغيلها صوتياً
+// 🗣️ مستخرج الجملة الأجنبية الصافية من أي سطر حواري أو مثال (يدعم الأوروبية + اليابانية + الصينية + الكورية!)
 const extractForeignSpeechFromLine = (text = '') => {
   if (!text) return '';
   const withoutFillBlank = text.replace(/\[\[([^\]|]+)(?:\|[^\]]*)?\]\]/g, '$1');
   const withoutArabicParens = withoutFillBlank.replace(/\([^)]*[\u0600-\u06FF]+[^)]*\)/g, '');
-  const withoutSpeakerPrefix = withoutArabicParens.replace(/^[-*•\d.)\s]*[^:\n]{1,25}:\s*/, '');
-  const foreignChunks = withoutSpeakerPrefix.match(/[A-Za-z\u00C0-\u024F\u3040-\u30ff\u4e00-\u9faf][A-Za-z\u00C0-\u024F\u3040-\u30ff\u4e00-\u9faf\s,.?!'’¿¡"-]{2,}/g);
+  const withoutSpeakerPrefix = withoutArabicParens.replace(/^[-*•\d.)🗣️\s]*[^:\n]{1,25}:\s*/, '');
+  const foreignChunks = withoutSpeakerPrefix.match(
+    /[A-Za-z\u00C0-\u024F\u3040-\u30ff\u4e00-\u9faf\uac00-\ud7af\u1100-\u11ff][A-Za-z\u00C0-\u024F\u3040-\u30ff\u4e00-\u9faf\uac00-\ud7af\u1100-\u11ff\s,.?!'’¿¡"‿-]{1,}/g
+  );
   return foreignChunks ? foreignChunks.join(' ').trim() : '';
+};
+
+// 🧭 كاشف المحطة التخصصية للدرس الحالي ضمن دورة الوحدة السداسية (V7 6-Station Cycle)
+const classifyLessonStationMeta = (lesson, indexInUnit = 0) => {
+  if (!lesson) return null;
+  const t = (lesson.title || '').toLowerCase();
+  if (lesson.type === 'red_gate') {
+    return { step: '🔥', shortLabel: 'بوابة حمراء', badge: '🔥 تحدي البوابة الحمراء', color: 'from-red-600/25 to-rose-950/40 border-red-500/50 text-red-300' };
+  }
+  if (lesson.type === 'boss_quiz') {
+    return { step: '🐉', shortLabel: 'تحدي الزعيم', badge: '🐉 بوابة التثبيت السمعي واللغوي', color: 'from-purple-600/25 to-indigo-950/40 border-purple-500/50 text-purple-300' };
+  }
+  if (lesson.type === 'unit_exam') {
+    return { step: '🏆', shortLabel: 'اختبار الوحدة', badge: '🏆 الاختبار الشامل للوحدة', color: 'from-amber-500/25 to-yellow-950/40 border-amber-500/50 text-amber-300' };
+  }
+
+  if (t.includes('المفردات') || t.includes('word power') || indexInUnit === 0) {
+    return { step: '1', shortLabel: '1. المفردات والقوالب', badge: '💎 المحطة 1: بنك المفردات والقوالب الذهبية (Word Power)', color: 'from-emerald-500/20 to-teal-950/30 border-emerald-500/40 text-emerald-300' };
+  }
+  if (t.includes('المحادثة') || t.includes('conversation') || indexInUnit === 1) {
+    return { step: '2', shortLabel: '2. المحادثة الواقعية', badge: '💬 المحطة 2: استوديو المحادثة الواقعية (Live Conversation)', color: 'from-sky-500/20 to-blue-950/30 border-sky-500/40 text-sky-300' };
+  }
+  if (t.includes('المكعبات') || t.includes('lego') || t.includes('قواعد') || indexInUnit === 2) {
+    return { step: '3', shortLabel: '3. القواعد والمخطط الزمني', badge: '🧱 المحطة 3: هندسة الجملة بالمكعبات والمخطط البصري (Visual Grammar)', color: 'from-amber-500/20 to-orange-950/30 border-amber-500/40 text-amber-300' };
+  }
+  if (t.includes('الصوتيات') || t.includes('النطق') || t.includes('pronunciation') || indexInUnit === 3) {
+    return { step: '4', shortLabel: '4. الصوتيات وتشريح الفم', badge: '🔊 المحطة 4: معمل الصوتيات، تشريح الفم، والثنائيات المتضادة (Phonics Lab)', color: 'from-purple-500/20 to-fuchsia-950/30 border-purple-500/40 text-purple-300' };
+  }
+  if (t.includes('الاستماع') || t.includes('الترديد') || t.includes('shadowing') || indexInUnit === 4) {
+    return { step: '5', shortLabel: '5. الاستماع والترديد', badge: '🎧 المحطة 5: مختبر الاستماع، الكلام المتصل، والترديد الظلي (Shadowing)', color: 'from-pink-500/20 to-rose-950/30 border-pink-500/40 text-pink-300' };
+  }
+  return { step: '6', shortLabel: '6. القراءة والكتابة', badge: '✍️ المحطة 6: ورشة القراءة القصصية، الكتابة، وعيادة الأخطاء (Reading & Writing)', color: 'from-indigo-500/20 to-slate-900 border-indigo-500/40 text-indigo-300' };
 };
 
 
@@ -935,6 +1034,36 @@ const EditableLessonBlocks = ({
 
   // 👄 حالة تحويل جدول المفردات إلى بطاقات تشريح الفم والصوت لكل شريحة
   const [visualCardsModeMap, setVisualCardsModeMap] = useState({});
+  // 🎯 حالة لعبة "تحدي الأذن العمياء" (Blind Ear Quiz) داخل بطاقات الفم والنطق
+  const [earQuizState, setEarQuizState] = useState(null); // { blockIdx, targetCard, options, pickedWord }
+
+  const startBlindEarQuiz = (bIdx, cardsList) => {
+    if (!cardsList || cardsList.length < 2 || !onPlayAudio) return;
+    const targetCard = cardsList[Math.floor(Math.random() * cardsList.length)];
+    const distractors = cardsList
+      .filter(c => c.word !== targetCard.word)
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 3);
+    const options = [targetCard, ...distractors].sort(() => Math.random() - 0.5);
+    setEarQuizState({ blockIdx: bIdx, targetCard, options, pickedWord: null });
+    onPlayAudio(targetCard.cleanSpeakableWord || targetCard.word, studentDefaultSpeed, `ear_quiz_${bIdx}`);
+  };
+
+  // ⌨️ دعم التنقل بين الشرائح بأزرار الأسهم (⬅️ / ➡️) عندما يكون التلميذ في وضع الشرائح السينمائية
+  useEffect(() => {
+    if (studentDisplayMode !== 'slides' || blocks.length <= 1) return;
+    const handleKeyDown = (e) => {
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return;
+      if (e.key === 'ArrowLeft') {
+        setActiveSlideIdx(prev => Math.min(blocks.length - 1, prev + 1));
+      } else if (e.key === 'ArrowRight') {
+        setActiveSlideIdx(prev => Math.max(0, prev - 1));
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [studentDisplayMode, blocks.length, setActiveSlideIdx]);
+
 
   const fontSizeClass =
     studentFontSize === 'xlarge'
@@ -1273,17 +1402,95 @@ const EditableLessonBlocks = ({
               </div>
             )}
 
-            {/* 👄 شبكة بطاقات تشريح الفم واللسان والصوتيات (تظهر عند ضغط التلميذ على زر بطاقات الفم والنطق) */}
+{/* 👄 شبكة بطاقات تشريح الفم واللسان والصوتيات + لعبة تحدي الأذن العمياء */}
             {isVisualCardsActive && vocabCards.length > 0 && (
               <div className="mb-6 p-4 rounded-2xl bg-slate-950/95 border-2 border-amber-500/40 space-y-4 animate-fade-in">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <h4 className="heading-font text-sm md:text-base font-black text-amber-400 flex items-center gap-2">
                     👄 مختبر البطاقات البصرية لتشريح الفم واللسان والأشعة الصوتية:
                   </h4>
-                  <span className="text-[11px] text-slate-400">
-                    اضغط على أي بطاقة لسماع النطق الأصلي أو البطئ أو حفظها في محفظتك ⭐
-                  </span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {vocabCards.length >= 2 && onPlayAudio && (
+                      <button
+                        type="button"
+                        onClick={() => startBlindEarQuiz(bIdx, vocabCards)}
+                        className="bg-gradient-to-l from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs px-3.5 py-1.5 rounded-xl shadow flex items-center gap-1.5 transition-all"
+                      >
+                        <Headphones size={13} /> 🎯 اختبر أذنك بالسمع الأعمى!
+                      </button>
+                    )}
+                  </div>
                 </div>
+
+                {/* 🎧 صندوق لعبة السمع الأعمى (Blind Ear Duel) */}
+                {earQuizState && earQuizState.blockIdx === bIdx && (
+                  <div className="bg-indigo-950/45 border-2 border-indigo-400/50 rounded-2xl p-4 space-y-3 animate-fade-in">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <span className="text-xs font-black text-indigo-200 flex items-center gap-2">
+                        🎧 استمع للصوت جيداً.. أي كلمة من بطاقات هذه الشريحة نطقها المعلم للتو؟
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => onPlayAudio(earQuizState.targetCard.cleanSpeakableWord || earQuizState.targetCard.word, 0.85, `ear_replay_${bIdx}`)}
+                          className="bg-purple-500 hover:bg-purple-400 text-white font-black text-xs px-3 py-1 rounded-lg flex items-center gap-1"
+                        >
+                          <Volume2 size={13} /> أعد سماع الصوت 🔊
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEarQuizState(null)}
+                          className="text-xs text-slate-400 hover:text-white"
+                        >
+                          إغلاق ✕
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" dir="ltr">
+                      {earQuizState.options.map((opt, oIdx) => {
+                        const isPicked = earQuizState.pickedWord === opt.word;
+                        const isCorrect = opt.word === earQuizState.targetCard.word;
+                        return (
+                          <button
+                            key={oIdx}
+                            type="button"
+                            onClick={() => {
+                              setEarQuizState(prev => ({ ...prev, pickedWord: opt.word }));
+                              onPlayAudio(opt.cleanSpeakableWord || opt.word, 1.0, `ear_opt_${oIdx}`);
+                            }}
+                            className={`p-2.5 rounded-xl border text-xs font-black transition-all ${
+                              isPicked
+                                ? isCorrect
+                                  ? 'bg-emerald-500 text-slate-950 border-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.5)]'
+                                  : 'bg-rose-600 text-white border-rose-400'
+                                : 'bg-slate-900 hover:bg-slate-800 text-white border-slate-700'
+                            }`}
+                          >
+                            {opt.emoji} {opt.word}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {earQuizState.pickedWord && (
+                      <div className="flex items-center justify-between text-xs font-bold pt-1">
+                        <span className={earQuizState.pickedWord === earQuizState.targetCard.word ? 'text-emerald-400' : 'text-rose-400'}>
+                          {earQuizState.pickedWord === earQuizState.targetCard.word
+                            ? `🎉 أذن موسيقية خارقة! الكلمة هي (${earQuizState.targetCard.word}) ومعناها: ${earQuizState.targetCard.meaning}`
+                            : '❌ ليست هذه الكلمة! اضغط (أعد سماع الصوت 🔊) وجرب خياراً آخر.'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => startBlindEarQuiz(bIdx, vocabCards)}
+                          className="text-amber-300 hover:text-amber-200 underline"
+                        >
+                          كلمة عشوائية أخرى ↻
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                   {vocabCards.map((card, cIdx) => {
@@ -1796,9 +2003,11 @@ const Classroom = () => {
       .map(row => (row.split('|')[1] || '').replace(/\*\*/g, '').trim())
       .filter(cell => cell && !/[\u0600-\u06FF]/.test(cell));
 
-    const phrasesQueue = [...new Set([...inlineMatches, ...tableCells])].filter(
-      p => p.length >= 2 && !p.includes('[') && /[A-Za-z\u00C0-\u024F]/.test(p)
-    );
+    const phrasesQueue = [...new Set([...inlineMatches, ...tableCells])]
+      .map(p => p.split('(')[0].replace(/🔵|🔴|🟢/g, '').trim())
+      .filter(
+        p => p.length >= 1 && !p.includes('[') && /[A-Za-z\u00C0-\u024F\u3040-\u30ff\u4e00-\u9faf\uac00-\ud7af]/.test(p)
+      );
 
     if (phrasesQueue.length === 0) {
       const fallbackForeign = extractForeignSpeechFromLine(blockMarkdown);
@@ -2789,10 +2998,11 @@ const Classroom = () => {
         .replace(/^✅.*$/g, '')
         .replace(/^\d+[.) -]+/, '')
         .replace(/\([^)]*[\u0600-\u06FF]+[^)]*\)/g, '')
+        .replace(/([\u3040-\u30ff\u4e00-\u9faf\uac00-\ud7af]+)\s*\([A-Za-z\u00C0-\u024F\s-]+\)/g, '$1')
         .replace(/[\u0600-\u06FF]+/g, '')
         .trim()
       )
-      .filter(l => l && !l.startsWith('🎧') && /[A-Za-z\u00C0-\u024F\u3040-\u30ff\u4e00-\u9faf]/.test(l))
+      .filter(l => l && !l.startsWith('🎧') && /[A-Za-z\u00C0-\u024F\u3040-\u30ff\u4e00-\u9faf\uac00-\ud7af]/.test(l))
       .join('. ');
 
     const textToSpeak = cleanForeign || rawText;
@@ -4960,7 +5170,66 @@ useEffect(() => {
                     </div>
                   )}
 
+
+
+
 {/* ======================================================= */}
+                  {/* 🧭 شريط المحطات الـ 6 التخصصية للوحدة الحالية (6-Station Unit Learning Cycle) */}
+                  {/* ======================================================= */}
+                  {hierarchyContext.unitLessons.length > 1 && (
+                    <div className="mb-5 bg-[#070d19] border border-slate-800/90 rounded-2xl p-3.5 shadow-lg space-y-2.5">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <span className="text-[11px] font-black text-indigo-300 flex items-center gap-1.5">
+                          <Compass size={14} className="text-amber-400" />
+                          خريطة محطات هذه الوحدة ({hierarchyContext.unitLessons.length} محطات متكاملة):
+                        </span>
+                        {(() => {
+                          const currentStation = classifyLessonStationMeta(
+                            activeLesson,
+                            hierarchyContext.unitLessons.findIndex(l => l._id === activeLesson._id)
+                          );
+                          return currentStation ? (
+                            <span className={`text-[11px] font-black px-3 py-0.5 rounded-full bg-gradient-to-l border ${currentStation.color}`}>
+                              {currentStation.badge}
+                            </span>
+                          ) : null;
+                        })()}
+                      </div>
+
+                      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 custom-scrollbar">
+                        {hierarchyContext.unitLessons.map((uLes, uIdx) => {
+                          const isCurrent = uLes._id === activeLesson._id;
+                          const isDone = completedLessons.includes(uLes._id);
+                          const stMeta = classifyLessonStationMeta(uLes, uIdx);
+                          return (
+                            <button
+                              key={uLes._id || uIdx}
+                              type="button"
+                              onClick={() => {
+                                setActiveLesson(uLes);
+                                resetQuestState();
+                              }}
+                              className={`px-3 py-1.5 rounded-xl text-[11px] font-bold flex items-center gap-1.5 shrink-0 border transition-all ${
+                                isCurrent
+                                  ? 'bg-emerald-500 text-slate-950 border-emerald-400 font-black shadow-[0_0_15px_rgba(16,185,129,0.35)]'
+                                  : isDone
+                                    ? 'bg-emerald-950/30 text-emerald-300 border-emerald-500/30 hover:bg-emerald-900/40'
+                                    : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-white'
+                              }`}
+                              title={uLes.title}
+                            >
+                              <span className="w-4 h-4 rounded-full bg-black/25 flex items-center justify-center text-[10px] font-black">
+                                {isDone ? '✓' : stMeta?.step || (uIdx + 1)}
+                              </span>
+                              <span>{stMeta?.shortLabel || uLes.title.slice(0, 18)}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ======================================================= */}
                   {/* 🎓🎛️ شريط إعدادات التلميذ الذكي لنظام القراءة التفاعلية (Student Smart Toolbar) */}
                   {/* ======================================================= */}
                   <div className="mb-6 bg-gradient-to-r from-slate-900 via-[#0b1324] to-slate-900 border-2 border-indigo-500/35 rounded-2xl p-3.5 shadow-xl flex flex-wrap items-center justify-between gap-3">
@@ -4994,11 +5263,11 @@ useEffect(() => {
                               : 'text-slate-400 hover:text-white'
                           }`}
                         >
-                          🎞️ شرائح سينمائية
+                          🎞️ شرائح سينمائية (⬅️➡️)
                         </button>
                       </div>
 
-                      {/* 2. زر الأشعة الصوتية (X-Ray Phonics للحروف الصامتة والوصل) */}
+                      {/* 2. زر الأشعة الصوتية (X-Ray Phonics للحروف الصامتة والوصل والأدوات الآسيوية) */}
                       <button
                         type="button"
                         onClick={() => setXrayPhonicsMode(!xrayPhonicsMode)}
@@ -5007,13 +5276,13 @@ useEffect(() => {
                             ? 'bg-teal-500/20 text-teal-300 border-teal-400/50 shadow-[0_0_12px_rgba(20,184,166,0.25)]'
                             : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
                         }`}
-                        title="تبهيت الحروف الصامتة في نهاية الكلمات بصرياً وتلوين قوس الوصل الصوتي ‿"
+                        title="تفعيل الأشعة الصوتية والنحوية (تبهيت الصامت، تلوين الوصل ‿، وإبراز الأدوات اليابانية والكورية)"
                       >
                         <Microscope size={13} />
                         <span>{xrayPhonicsMode ? 'الأشعة الصوتية: مفعّلة 🔬' : 'الأشعة الصوتية'}</span>
                       </button>
 
-                      {/* 3. زر وضع الانغماس اللغوي (تمويه الترجمة العربية وتظهر عند التمرير Hover) */}
+                      {/* 3. زر وضع الانغماس اللغوي */}
                       <button
                         type="button"
                         onClick={() => setHideArabicHints(!hideArabicHints)}
@@ -5139,7 +5408,8 @@ useEffect(() => {
                     </div>
                   )}
 
-                  {/* ======================================================= */}
+
+{/* ======================================================= */}
                   {/* 🧱 عرض محتوى الدرس مقسماً إلى شرائح حية قابلة للتفاعل والتعديل */}
                   {/* ======================================================= */}
                   <div className="lesson-content">
@@ -5189,26 +5459,64 @@ useEffect(() => {
                           p({children}) {
                             const rawText = extractDeepTextFromReactNode(children).trim();
 
+                            // 1. فحص تمرين "املأ الفراغ" التفاعلي [[...]]
                             if (rawText.includes('[[') && rawText.includes(']]')) {
                               return <InlineFillBlankSentence rawText={rawText} onSpeak={(txt) => handlePlayAudioText(txt, studentDefaultSpeed, 'fill_p')} />;
                             }
 
-                            const isDialogueLine = /^([A-Za-z\u00C0-\u024F\u0600-\u06FF\s]{2,20}):\s+/.test(rawText) && /[A-Za-z\u00C0-\u024F]/.test(rawText);
+                            // 2. 📊 فحص المخططات الزمنية والانسيابية (Visual Timeline / Flowchart Board)
+                            if ((rawText.includes('──') || rawText.includes('➔') || rawText.includes('⏪')) && rawText.includes('[')) {
+                              const steps = rawText.split(/──+|➔|⬅️/).map(s => s.trim()).filter(Boolean);
+                              if (steps.length >= 2) {
+                                return (
+                                  <div className="my-5 p-4 rounded-2xl bg-gradient-to-r from-indigo-950/50 via-slate-950 to-purple-950/50 border-2 border-indigo-500/40 shadow-xl">
+                                    <span className="text-[10px] font-black text-amber-400 uppercase tracking-wider block mb-2.5">
+                                      📊 المخطط البصري والخط الزمني للقاعدة (Visual Timeline & Flow):
+                                    </span>
+                                    <div className="flex flex-wrap items-center justify-center gap-2" dir="auto">
+                                      {steps.map((st, sIdx) => (
+                                        <React.Fragment key={sIdx}>
+                                          <div className="bg-slate-900 border border-indigo-500/40 text-white font-bold text-xs sm:text-sm px-3.5 py-2 rounded-xl shadow">
+                                            {st.replace(/^\[|\]$/g, '')}
+                                          </div>
+                                          {sIdx < steps.length - 1 && (
+                                            <span className="text-amber-400 font-black text-lg">➔</span>
+                                          )}
+                                        </React.Fragment>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              }
+                            }
+
+                            // 3. 💬 فحص أسطر المحادثة لتحويلها إلى فقاعة حوار تفاعلية ناطقة
+                            const isDialogueLine = /^(?:🗣️\s*)?([A-Za-z\u00C0-\u024F\u0600-\u06FF\u3040-\u30ff\u4e00-\u9faf\uac00-\ud7af\s]{2,20}):\s+/u.test(rawText);
                             const foreignSpeech = isDialogueLine ? extractForeignSpeechFromLine(rawText) : '';
                             const isArabicTranslationLine = /^(\*?\(?الترجمة|\(الترجمة)/i.test(rawText);
 
                             if (foreignSpeech) {
                               return (
-                                <div className="text-[#cbd5e1] mb-6 font-normal flex items-start justify-between gap-3">
-                                  <div className="flex-1">{children}</div>
-                                  <button
-                                    type="button"
-                                    onClick={() => handlePlayAudioText(foreignSpeech, studentDefaultSpeed, `dlg_p_${foreignSpeech.slice(0, 15)}`)}
-                                    className="shrink-0 mt-1 bg-purple-500/15 hover:bg-purple-600 text-purple-300 hover:text-white px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1 border border-purple-500/30 transition-all"
-                                    title="استمع لنطق هذه العبارة الحوارية"
-                                  >
-                                    <Volume2 size={13} /> اسمع
-                                  </button>
+                                <div className="my-3 p-4 rounded-2xl bg-[#070e1d] border border-indigo-500/35 hover:border-purple-500/50 shadow-md flex items-start justify-between gap-3 transition-all">
+                                  <div className="flex-1 text-[#e2e8f0] leading-[1.95]">{children}</div>
+                                  <div className="flex items-center gap-1 shrink-0 mt-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => handlePlayAudioText(foreignSpeech, studentDefaultSpeed, `dlg_p_${foreignSpeech.slice(0, 15)}`)}
+                                      className="bg-purple-500/20 hover:bg-purple-600 text-purple-300 hover:text-white px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 border border-purple-500/30 transition-all"
+                                      title="استمع لنطق هذه العبارة الحوارية"
+                                    >
+                                      <Volume2 size={13} /> اسمع
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handlePlayAudioText(foreignSpeech, 0.68, `dlg_slow_${foreignSpeech.slice(0, 15)}`)}
+                                      className="bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-slate-950 px-2 py-1.5 rounded-xl text-[11px] font-black border border-amber-500/30 transition-all"
+                                      title="نطق بطيء للترديد"
+                                    >
+                                      🐢
+                                    </button>
+                                  </div>
                                 </div>
                               );
                             }
@@ -5231,8 +5539,36 @@ useEffect(() => {
                               );
                             }
 
+                            const isDialogueLi = /^(?:🗣️\s*)?([A-Za-z\u00C0-\u024F\u0600-\u06FF\u3040-\u30ff\u4e00-\u9faf\uac00-\ud7af\s]{2,20}):\s+/u.test(rawText);
                             const foreignSpeech = extractForeignSpeechFromLine(rawText);
-                            const hasSubstantialForeign = foreignSpeech && foreignSpeech.length >= 3 && !rawText.includes('🔊');
+                            const hasSubstantialForeign = foreignSpeech && foreignSpeech.length >= 2 && !rawText.includes('🔊');
+
+                            if (isDialogueLi && foreignSpeech) {
+                              return (
+                                <li className="list-none my-2.5">
+                                  <div className="p-3.5 rounded-2xl bg-[#070e1d] border border-indigo-500/35 hover:border-purple-500/50 shadow-md flex items-start justify-between gap-3 transition-all">
+                                    <div className="flex-1 text-[#e2e8f0] leading-[1.9]">{children}</div>
+                                    <div className="flex items-center gap-1 shrink-0 mt-0.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => handlePlayAudioText(foreignSpeech, studentDefaultSpeed, `dlg_li_${foreignSpeech.slice(0, 15)}`)}
+                                        className="bg-purple-500/20 hover:bg-purple-600 text-purple-300 hover:text-white px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1 border border-purple-500/30 transition-all"
+                                      >
+                                        <Volume2 size={13} /> اسمع
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handlePlayAudioText(foreignSpeech, 0.68, `dlg_li_slow_${foreignSpeech.slice(0, 15)}`)}
+                                        className="bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-slate-950 px-2 py-1 rounded-xl text-[11px] font-black border border-amber-500/30 transition-all"
+                                        title="نطق بطيء"
+                                      >
+                                        🐢
+                                      </button>
+                                    </div>
+                                  </div>
+                                </li>
+                              );
+                            }
 
                             return (
                               <li className="text-[#cbd5e1] flex items-start justify-between gap-3 group/li my-1.5">
@@ -5288,14 +5624,14 @@ useEffect(() => {
                             const isRightCell = cellText.includes('✅');
                             const isPureForeignWord =
                               cellText.length >= 1 &&
-                              cellText.length <= 35 &&
+                              cellText.length <= 42 &&
                               !cellText.includes('/') &&
-                              !/[\u0600-\u06FF]/.test(cellText) &&
+                              !/^[\u0600-\u06FF\s]+$/.test(cellText.split('(')[0]) &&
                               /[\p{L}]/u.test(cellText);
 
-                            const isArabicCell = /[\u0600-\u06FF]/.test(cellText) && !cellText.includes('/');
+                            const isArabicCell = /[\u0600-\u06FF]/.test(cellText) && !cellText.includes('/') && !isPureForeignWord;
                             const genderBadge = isPureForeignWord ? detectGrammaticalGenderBadge(cellText) : null;
-                            const cleanWordKey = cellText.split('/')[0].trim();
+                            const cleanWordKey = cellText.split('(')[0].split('/')[0].replace(/🔵|🔴|🟢/g, '').trim();
                             const isWordSaved = isPureForeignWord && savedStudentWords.some(w => w.word.toLowerCase() === cleanWordKey.toLowerCase());
 
                             return (
@@ -5320,7 +5656,7 @@ useEffect(() => {
                                     )}
                                   </span>
 
-                                  {isPureForeignWord && (
+                                  {isPureForeignWord && cleanWordKey && (
                                     <div className="flex items-center gap-1 shrink-0">
                                       <button
                                         type="button"
@@ -5338,7 +5674,7 @@ useEffect(() => {
                                         type="button"
                                         onClick={() => handlePlayAudioText(cleanWordKey, studentDefaultSpeed, `tbl_${cellText}`)}
                                         className="bg-purple-500/15 hover:bg-purple-600 text-purple-300 hover:text-white p-1.5 rounded-lg border border-purple-500/30 transition-all"
-                                        title={`استمع لنطق: ${cellText}`}
+                                        title={`استمع لنطق: ${cleanWordKey}`}
                                       >
                                         <Volume2 size={13} />
                                       </button>
@@ -5351,9 +5687,19 @@ useEffect(() => {
                           code({node, inline, className, children, ...props}) {
                             const match = /language-(\w+)/.exec(className || '');
                             const codeStr = String(children).replace(/\n$/, '');
+
+                            // 📊 تحويل المخططات الزمنية المكتوبة داخل كود مضمن إلى شارة مخطط زمني
+                            if ((inline || !match) && (codeStr.includes('──') || codeStr.includes('⏪') || codeStr.includes('⏩'))) {
+                              return (
+                                <span className="my-2 px-3.5 py-1.5 rounded-xl bg-indigo-950/70 border border-indigo-400/50 text-amber-300 font-bold text-xs sm:text-sm inline-flex items-center gap-2 shadow">
+                                  {codeStr}
+                                </span>
+                              );
+                            }
+
                             const isShortForeignPhrase =
                               (inline || !match) &&
-                              codeStr.length < 65 &&
+                              codeStr.length < 75 &&
                               !/[\u0600-\u06FF]/.test(codeStr) &&
                               /[\p{L}]/u.test(codeStr) &&
                               !codeStr.includes('[');
@@ -5375,7 +5721,7 @@ useEffect(() => {
                               </div>
                             ) : (
                               <code
-                                onClick={() => isShortForeignPhrase && handlePlayAudioText(codeStr.replace(/\.\.\./g, ''), studentDefaultSpeed, `inline_${codeStr}`)}
+                                onClick={() => isShortForeignPhrase && handlePlayAudioText(codeStr.split('(')[0].replace(/\.\.\./g, '').trim(), studentDefaultSpeed, `inline_${codeStr}`)}
                                 className={`code-font bg-slate-800/90 text-emerald-300 px-2 py-0.5 rounded-md text-[0.9em] border border-slate-700/60 mx-0.5 inline-flex items-center gap-1 ${
                                   isShortForeignPhrase ? 'cursor-pointer hover:bg-purple-900/50 hover:border-purple-400 hover:text-white transition-all' : ''
                                 }`}
@@ -5397,6 +5743,8 @@ useEffect(() => {
                       </div>
                     )}
                   </div>
+
+
 
                   {/* ======================================================= */}
                   {/* 📋 3. جدول الخلاصة التصحيحية (مع شريط التحكم الجراحي) */}

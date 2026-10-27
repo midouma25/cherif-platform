@@ -15,6 +15,7 @@ const Navbar = () => {
     { path: '/b2b', name: 'حلول الشركات', icon: <Briefcase size={18} /> },
     { path: '/hub', name: 'المستندات', icon: <BookOpenText size={18} /> },
     { path: '/rankings', name: 'التصنيفات', icon: <Trophy size={18} /> },
+    { path: '/language-exam-center', name: 'مركز الاختبارات اللغوية', icon: <User size={18} /> }
   ];
 
   const handleLogout = () => {

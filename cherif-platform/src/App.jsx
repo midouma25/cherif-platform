@@ -17,6 +17,7 @@ import Classroom from './Classroom';
 import Rankings from './Rankings'; 
 import Certificate from './Certificate';
 import LandingPage from './LandingPage';
+import LanguageExamCenter from './LanguageExamCenter';
 
 const App = () => {
   return (
@@ -87,6 +88,7 @@ const App = () => {
               <Route path="/login" element={<Auth />} />
               <Route path="/course/:id" element={<CourseDetails />} />
               <Route path="/course/:id/learn" element={<Classroom />} />
+              <Route path="/language-exam-center" element={<LanguageExamCenter />} />
               
               {/* مسارات محمية بصلاحيات (RBAC) */}
               <Route path="/hub" element={
