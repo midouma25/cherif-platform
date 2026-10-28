@@ -196,81 +196,69 @@ const detectGrammaticalGenderBadge = (text = '') => {
 };
 
 // ============================================================================
-// 🔬 0.8 محرك الأشعة الصوتية الشامل لـ 7 لغات (X-Ray Phonics & Grammar Particles V7)
-// يكشف: الحروف الصامتة 🔇، الوصل الصوتي ‿، الأدوات اليابانية والكورية، والنغمات الصينية!
+// 🔬 0.8 محرك الأشعة الصوتية الشامل لـ 7 لغات (X-Ray Phonics V7)
 // ============================================================================
-const renderXRayForeignWord = (rawText = '', enabled = true) => {
+const renderXRayForeignWord = (rawText = '', enabled = true, langCode = 'en-US') => {
   if (!enabled || !rawText || typeof rawText !== 'string') return rawText;
 
-  // 1. إذا كان النص يحتوي على حروف يابانية (إبراز الأدوات النحوية Particles والشدة っ)
+  // 1. اللغة اليابانية
   if (/[\u3040-\u30ff]/.test(rawText)) {
     const jpParts = rawText.split(/(\s+|[はがをにでへのもか]|っ)/g);
     return jpParts.map((part, i) => {
       if (/^[はがをにでへのもか]$/.test(part)) {
-        return (
-          <span
-            key={i}
-            className="text-amber-300 font-black underline decoration-amber-400/70 px-[1px]"
-            title="أداة ربط نحوية يابانية (Particle 助詞)"
-          >
-            {part}
-          </span>
-        );
+        return <span key={i} className="text-amber-300 font-black underline decoration-amber-400/70 px-[1px]" title="أداة ربط نحوية يابانية">{part}</span>;
       }
       if (part === 'っ') {
-        return (
-          <span key={i} className="text-rose-400 font-black" title="شدة صوتية يابانية (وقفة قصيرة Sokuon)">
-            っ
-          </span>
-        );
+        return <span key={i} className="text-rose-400 font-black" title="وقفة قصيرة Sokuon">っ</span>;
       }
       return <React.Fragment key={i}>{part}</React.Fragment>;
     });
   }
 
-  // 2. إذا كان النص يحتوي على حروف هانغول كورية (إبراز أدوات الموضوع/المفعول ونهايات الاحترام)
+  // 2. اللغة الكورية
   if (/[\uac00-\ud7af]/.test(rawText)) {
     const krParts = rawText.split(/(\s+|(?:은|는|이|가|을|를|에|에서|어요|아요|해요|습니다|입니다|예요|이에요)(?=\s|[.,?!]|$))/g);
     return krParts.map((part, i) => {
       if (/^(은|는|이|가|을|를|에|에서)$/.test(part)) {
-        return (
-          <span key={i} className="text-amber-300 font-black underline decoration-amber-400/70" title="أداة نحوية كورية (Particle)">
-            {part}
-          </span>
-        );
+        return <span key={i} className="text-amber-300 font-black underline decoration-amber-400/70" title="أداة نحوية كورية">{part}</span>;
       }
       if (/^(어요|아요|해요|습니다|입니다|예요|이에요)$/.test(part)) {
-        return (
-          <span key={i} className="text-sky-300 font-black" title="نهاية الفعل المهذبة في الكورية">
-            {part}
-          </span>
-        );
+        return <span key={i} className="text-sky-300 font-black" title="نهاية الفعل المهذبة">{part}</span>;
       }
       return <React.Fragment key={i}>{part}</React.Fragment>;
     });
   }
 
-  // 3. اللغات اللاتينية والبينين (كشف الوصل ‿ + الحروف الصامتة النهائية + علامات النبر ˈ)
+  // 3. اللغات اللاتينية (إنجليزية، فرنسية، ألمانية...)
   const tokens = rawText.split(/(\s+|‿)/g);
+  const isFrench = langCode.startsWith('fr');
+  const isEnglish = langCode.startsWith('en');
 
   return tokens.map((tok, idx) => {
     if (tok === '‿') {
       return (
-        <span
-          key={idx}
-          className="text-amber-400 font-black px-0.5 drop-shadow-[0_0_8px_rgba(245,158,11,0.8)]"
-          title="وصل صوتي (Liaison): اربط الحرف الساكن بالكلمة التي تليه ككلمة واحدة"
-        >
-          ‿
-        </span>
+        <span key={idx} className="text-amber-400 font-black px-0.5 drop-shadow-[0_0_8px_rgba(245,158,11,0.8)]" title="وصل صوتي (Liaison)">‿</span>
       );
     }
 
     const cleanWord = tok.replace(/[.,?!;:'"()]/g, '').toLowerCase();
-    const silentEndMatch =
-      cleanWord.length >= 3 &&
-      !/^(un|une|le|la|de|du|je|tu|il|on|ou|et|qui|roi|loi|moi|toi|soi|eau|feu|bleu|vœu|jeu|bus|fils|ours|sens|gaz)$/i.test(cleanWord) &&
-      tok.match(/^([A-Za-z\u00C0-\u024F]{2,}?)([tsdxze])([.,?!;:]*)$/i);
+    let silentEndMatch = null;
+
+    // ✨ التعديل الجوهري: قواعد الحروف الصامتة مفصولة حسب اللغة
+    if (isFrench) {
+      // قاعدة الفرنسية: s, t, d, x, z, e غالباً صامتة في النهاية
+      silentEndMatch =
+        cleanWord.length >= 3 &&
+        !/^(un|une|le|la|de|du|je|tu|il|on|ou|et|qui|roi|loi|moi|toi|soi|eau|feu|bleu|vœu|jeu|bus|fils|ours|sens|gaz)$/i.test(cleanWord) &&
+        tok.match(/^([A-Za-z\u00C0-\u024F]{2,}?)([tsdxze])([.,?!;:]*)$/i);
+    } else if (isEnglish) {
+      // قاعدة الإنجليزية: التركيز على الـ e الصامتة في النهاية (Magic E) فقط
+      silentEndMatch =
+        cleanWord.length >= 3 &&
+        !/^(the|she|he|me|we|be|see|tree|free)$/i.test(cleanWord) &&
+        tok.match(/^([A-Za-z]{2,}?)([e])([.,?!;:]*)$/i);
+    }
+    // اللغات الألمانية والإسبانية تنطق نهاياتها بوضوح لذا لا نطبق عليها Regex الصمت افتراضياً
 
     if (silentEndMatch) {
       const [, stem, silentChar, punct] = silentEndMatch;
@@ -291,6 +279,8 @@ const renderXRayForeignWord = (rawText = '', enabled = true) => {
     return <React.Fragment key={idx}>{tok}</React.Fragment>;
   });
 };
+
+
 
 // ============================================================================
 // 👄 0.9 مستخرج بطاقات تشريح الفم، النغمات، والأدوات من جداول الـ Markdown
@@ -1507,7 +1497,7 @@ const EditableLessonBlocks = ({
                             <span className="text-3xl">{card.emoji}</span>
                             <div>
                               <div className="text-lg font-black text-white flex items-center gap-2 flex-wrap">
-                                <span>{renderXRayForeignWord(card.word, xrayPhonicsMode)}</span>
+                                <span>{renderXRayForeignWord(card.word, xrayPhonicsMode, activeLangConfig.code)}</span>
                                 {card.gender && (
                                   <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${card.gender.classes}`} dir="rtl">
                                     {card.gender.label}
@@ -1515,7 +1505,7 @@ const EditableLessonBlocks = ({
                                 )}
                               </div>
                               <p className="code-font text-xs text-emerald-400 mt-0.5">
-                                {renderXRayForeignWord(card.ipa, xrayPhonicsMode)}
+                                {renderXRayForeignWord(card.ipa, xrayPhonicsMode, activeLangConfig.code)}
                               </p>
                             </div>
                           </div>
@@ -5390,7 +5380,7 @@ useEffect(() => {
                                 <Volume2 size={13} />
                               </button>
                               <div>
-                                <strong className="text-white block">{renderXRayForeignWord(item.word, xrayPhonicsMode)}</strong>
+                                <strong className="text-white block">{renderXRayForeignWord(item.word, xrayPhonicsMode, activeLangConfig.code)}</strong>
                                 {item.meaning && <span className="text-[10px] text-amber-300 block" dir="rtl">{item.meaning}</span>}
                               </div>
                               <button
@@ -5417,6 +5407,7 @@ useEffect(() => {
                       <EditableLessonBlocks
                         rawMarkdown={sanitizeLessonMarkdown(activeLesson.content, true)}
                         isOperating={isOperatingLesson}
+                        activeLangConfig={activeLangConfig} // 👈 مرر هذا الـ Prop الجديد
                         onSaveFullMarkdown={(newMarkdownContent, reportMsg) =>
                           applyUpdatedLessonToState({ ...activeLesson, content: newMarkdownContent }, reportMsg)
                         }
@@ -5618,72 +5609,85 @@ useEffect(() => {
                           th({children}) {
                             return <th className="p-3.5 md:p-4 font-bold text-right">{children}</th>
                           },
-                          td({children}) {
-                            const cellText = extractDeepTextFromReactNode(children).trim();
-                            const isWrongCell = cellText.includes('❌');
-                            const isRightCell = cellText.includes('✅');
-                            const isPureForeignWord =
-                              cellText.length >= 1 &&
-                              cellText.length <= 42 &&
-                              !cellText.includes('/') &&
-                              !/^[\u0600-\u06FF\s]+$/.test(cellText.split('(')[0]) &&
-                              /[\p{L}]/u.test(cellText);
+td({children}) {
+  const cellText = extractDeepTextFromReactNode(children).trim();
+  const isWrongCell = cellText.includes('❌');
+  const isRightCell = cellText.includes('✅');
+  
+  // دالة ذكية لاكتشاف ما إذا كان النص يحتوي بشكل أساسي على حروف أجنبية
+  const isPureForeignWord =
+    cellText.length >= 1 &&
+    cellText.length <= 42 &&
+    !cellText.includes('/') &&
+    !/^[\u0600-\u06FF\s]+$/.test(cellText.split('(')[0]) &&
+    /[\p{L}]/u.test(cellText) && 
+    !cellText.includes('الترجمة'); // تجنب معاملة الترجمات ككلمات أجنبية
 
-                            const isArabicCell = /[\u0600-\u06FF]/.test(cellText) && !cellText.includes('/') && !isPureForeignWord;
-                            const genderBadge = isPureForeignWord ? detectGrammaticalGenderBadge(cellText) : null;
-                            const cleanWordKey = cellText.split('(')[0].split('/')[0].replace(/🔵|🔴|🟢/g, '').trim();
-                            const isWordSaved = isPureForeignWord && savedStudentWords.some(w => w.word.toLowerCase() === cleanWordKey.toLowerCase());
+  const isArabicCell = /[\u0600-\u06FF]/.test(cellText) && !cellText.includes('/') && !isPureForeignWord;
+  const genderBadge = isPureForeignWord ? detectGrammaticalGenderBadge(cellText) : null;
+  const cleanWordKey = cellText.split('(')[0].split('/')[0].replace(/🔵|🔴|🟢/g, '').trim();
+  const isWordSaved = isPureForeignWord && savedStudentWords.some(w => w.word.toLowerCase() === cleanWordKey.toLowerCase());
 
-                            return (
-                              <td className={`p-3.5 md:p-4 leading-relaxed ${
-                                isWrongCell ? 'bg-red-950/15 text-red-200 font-medium'
-                                : isRightCell ? 'bg-emerald-950/15 text-emerald-200 font-bold'
-                                : 'text-slate-200'
-                              }`}>
-                                <div className="flex items-center justify-between gap-2 flex-wrap">
-                                  <span
-                                    className={`inline-flex items-center gap-1.5 flex-wrap ${
-                                      hideArabicHints && isArabicCell ? 'immersion-blur-target' : ''
-                                    }`}
-                                    title={hideArabicHints && isArabicCell ? 'مرر الماوس لكشف النص العربي' : ''}
-                                  >
-                                    {isPureForeignWord && <span className="ml-1">{getEmojiForText(cellText)}</span>}
-                                    <span>{isPureForeignWord ? renderXRayForeignWord(cellText, xrayPhonicsMode) : children}</span>
-                                    {genderBadge && (
-                                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${genderBadge.classes}`}>
-                                        {genderBadge.label}
-                                      </span>
-                                    )}
-                                  </span>
+  return (
+    <td className={`p-3.5 md:p-4 leading-relaxed ${
+      isWrongCell ? 'bg-red-950/15 text-red-200 font-medium'
+      : isRightCell ? 'bg-emerald-950/15 text-emerald-200 font-bold'
+      : 'text-slate-200'
+    }`}>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <span
+          className={`inline-flex items-center gap-1.5 flex-wrap ${
+            hideArabicHints && isArabicCell ? 'immersion-blur-target' : ''
+          }`}
+          title={hideArabicHints && isArabicCell ? 'مرر الماوس لكشف النص العربي' : ''}
+          // ✨ التعديل هنا: إذا كانت الكلمة أجنبية، نفرض اتجاه LTR على هذه الحاوية بأكملها 
+          dir={isPureForeignWord ? "ltr" : "auto"} 
+        >
+          {isPureForeignWord && <span className="mr-1">{getEmojiForText(cellText)}</span>}
+          
+          {/* ✨ التعديل هنا: عزل الكلمة الأجنبية داخل span مع اتجاه LTR صريح وقوي */}
+          <span 
+            dir={isPureForeignWord ? "ltr" : "auto"} 
+            className={isPureForeignWord ? "inline-block text-left" : ""}
+          >
+            {isPureForeignWord ? renderXRayForeignWord(cellText, xrayPhonicsMode, activeLangConfig.code) : children}
+          </span>
+          
+          {genderBadge && (
+            <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${genderBadge.classes}`} dir="rtl">
+              {genderBadge.label}
+            </span>
+          )}
+        </span>
 
-                                  {isPureForeignWord && cleanWordKey && (
-                                    <div className="flex items-center gap-1 shrink-0">
-                                      <button
-                                        type="button"
-                                        onClick={() => toggleSaveStudentWord(cleanWordKey)}
-                                        className={`p-1.5 rounded-lg border text-xs font-black transition-all ${
-                                          isWordSaved
-                                            ? 'bg-amber-500/20 border-amber-400 text-amber-300'
-                                            : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-amber-300'
-                                        }`}
-                                        title="احفظ في محفظة مفرداتي ⭐"
-                                      >
-                                        ★
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handlePlayAudioText(cleanWordKey, studentDefaultSpeed, `tbl_${cellText}`)}
-                                        className="bg-purple-500/15 hover:bg-purple-600 text-purple-300 hover:text-white p-1.5 rounded-lg border border-purple-500/30 transition-all"
-                                        title={`استمع لنطق: ${cleanWordKey}`}
-                                      >
-                                        <Volume2 size={13} />
-                                      </button>
-                                    </div>
-                                  )}
-                                </div>
-                              </td>
-                            );
-                          },
+        {isPureForeignWord && cleanWordKey && (
+          <div className="flex items-center gap-1 shrink-0" dir="ltr"> {/* فرض اتجاه LTR لأزرار الصوت */}
+            <button
+              type="button"
+              onClick={() => toggleSaveStudentWord(cleanWordKey)}
+              className={`p-1.5 rounded-lg border text-xs font-black transition-all ${
+                isWordSaved
+                  ? 'bg-amber-500/20 border-amber-400 text-amber-300'
+                  : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-amber-300'
+              }`}
+              title="احفظ في محفظة مفرداتي ⭐"
+            >
+              ★
+            </button>
+            <button
+              type="button"
+              onClick={() => handlePlayAudioText(cleanWordKey, studentDefaultSpeed, `tbl_${cellText}`)}
+              className="bg-purple-500/15 hover:bg-purple-600 text-purple-300 hover:text-white p-1.5 rounded-lg border border-purple-500/30 transition-all"
+              title={`استمع لنطق: ${cleanWordKey}`}
+            >
+              <Volume2 size={13} />
+            </button>
+          </div>
+        )}
+      </div>
+    </td>
+  );
+},
                           code({node, inline, className, children, ...props}) {
                             const match = /language-(\w+)/.exec(className || '');
                             const codeStr = String(children).replace(/\n$/, '');
@@ -5729,7 +5733,7 @@ useEffect(() => {
                                 title={isShortForeignPhrase ? `اضغط لسماع النطق باللغة ${activeLangConfig.nameAr} 🔊` : ''}
                                 {...props}
                               >
-                                {isShortForeignPhrase ? renderXRayForeignWord(codeStr, xrayPhonicsMode) : children}
+                                {isShortForeignPhrase ? renderXRayForeignWord(codeStr, xrayPhonicsMode, activeLangConfig.code) : children}
                                 {isShortForeignPhrase && <Volume2 size={11} className="text-purple-400 shrink-0" />}
                               </code>
                             )
