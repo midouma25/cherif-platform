@@ -5387,7 +5387,7 @@ useEffect(() => {
                                 type="button"
                                 onClick={() => toggleSaveStudentWord(item.word)}
                                 className="text-rose-400 hover:text-rose-300 text-xs ml-1"
-                                title="إزالة من محفظتي"
+                                title="إزالة من محفظتي   "
                               >
                                 ✕
                               </button>
