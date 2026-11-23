@@ -81,25 +81,76 @@ const resolveLanguageConfig = (contextStr = '', sampleText = '') => {
   return { code: 'en-US', nameAr: 'الإنجليزية', nameEn: 'English', flag: '🇬🇧', family: 'european' };
 };
 
-// ============================================================================
-// 🧹 0.5 محرك التطهير، ترتيب اللغات (BiDi Fixer)، ومنع التكرار التلقائي الشامل
-// ============================================================================
+
+
 const sanitizeLessonMarkdown = (raw = '', stripRawPromptSection = false) => {
   if (!raw) return '';
   let cleaned = raw
     .replace(/[\u0900-\u097F]+/g, '')
     .replace(/פּ/g, 'پ')
+
+
+
+
+    // ✨ FIX: Phase 1 Deep Linguistic & Double-Article Sanitizer (7 Languages)
+    .replace(/`?\bH[iI]?\s*[وअأإآ]+\s*`?\s*`?hören\s+Sie!?/gi, 'Hören Sie!')
+    // 1. إصلاح الكلمات الألمانية المقطوعة بحروف أو كلمات عربية دخيلة في ملف الشهادة
+    .replace(/\bIch\s+تر\s*inke\b/g, 'Ich trinke')
+    .replace(/\bWo\s+هو\b/g, 'Wo ist')
+    .replace(/\bDas\s+هو\b/g, 'Das ist')
+    .replace(/\bPfer\s*د\b/g, 'Pferd')
+    .replace(/\bDer\s+K\s*دي\s*ug\b/g, 'Der Krug')
+    .replace(/\bG\s*و\s*uten\s+Tag\b/g, 'Guten Tag')
+    .replace(/\bist\s+هنا\b/g, 'ist hier')
+    .replace(/في\s+يدي\./g, 'in der Hand.')
+    .replace(/في\s+غرفتي\./g, 'in meinem Zimmer.')
+    // 2. إزالة تكرار أداة التعريف الملونة (🔵 der / 🔴 die / 🟢 das) بعد أدوات التنكير أو الملكية أو النفي
+    .replace(
+      /\b(mein|meine|meinen|meinem|dein|deine|deinen|deinem|sein|seine|ihr|ihre|unser|unsere|euer|eure|ein|eine|einen|einem|einer|kein|keine|keinen|keinem)\s+(?:`?[🔵🔴🟢]`?\s*)?(?:der|die|das|den|dem)\s+([A-ZÄÖÜ][a-zäöüß]+)/gi,
+      '$1 $2'
+    )
+    .replace(/\bim\s+(?:`?[🔵🔴🟢]`?\s*)?(?:der|die|das)\s+([A-ZÄÖÜ][a-zäöüß]+)/g, 'im $1')
+    .replace(/`?\b([A-Za-z])`?\s*[\u0600-\u06FF]{1,4}\s+`?([a-zA-Z\u00C0-\u024F]{2,})/g, (_, firstChar, word) =>
+      firstChar.toLowerCase() === word.charAt(0).toLowerCase()
+        ? word.charAt(0).toUpperCase() + word.slice(1)
+        : `${firstChar} ${word}`
+    )
+    // 3. حذف أي حروف عربية ملتصقة بنهاية أو وسط كلمة لاتينية
     .replace(/c'هست/gi, "c'est")
     .replace(/C'هست/g, "C'est")
     .replace(/c'ست/gi, "c'est")
     .replace(/C'ست/g, "C'est")
     .replace(/مaman/gi, "maman")
     .replace(/Il\s+هو\s+bon/gi, "Il est bon")
+    .replace(/([A-Za-z\u00C0-\u024F]{2,})[\u0600-\u06FF]+/g, '$1')
+    .replace(/أنا\s+[أا]سمي\s+[أاآ]نا/g, 'اسمي آنا (أو: أنا أدعى آنا)')
+    .replace(/\bdas\s+Berlin\b/gi, 'Berlin')
     .replace(/\bun clé\b/gi, "une clé")
     .replace(/\bUn clé\b/g, "Une clé")
     .replace(/---+\+/g, '---')
+    .replace(/---\|/g, '---')
     .replace(/---;/g, '---')
-    .replace(/🔊\s*IPA:\s*\/([\u0600-\u06FF\s]+)\//g, '🔊 النطق: /$1/');
+    .replace(/🔊\s*IPA:\s*\/([\u0600-\u06FF\s]+)\//g, '🔊 النطق: /$1/')
+
+
+    // فك علامات الكود (`...`) عن جمل الترجمة العربية لمنع انعكاس الأقواس والنقاط مثل (.الترجمة: استمع! هذا صوت)
+    .replace(/`(\s*\(?الترجمة[^`\n]+\)?)`/g, '$1')
+    // تطهير أي كبسولة كود أجنبية (`...`) من أي حروف عربية شاردة بداخلها
+    .replace(/`([^`\n]+)`/g, (fullMatch, inner) => {
+      const hasForeign = /[A-Za-z\u00C0-\u024F\u3040-\u30ff\u4e00-\u9faf\uac00-\ud7af]/.test(inner);
+      const hasArabic = /[\u0600-\u06FF]/.test(inner);
+      if (hasForeign && hasArabic && !inner.includes('الترجمة') && !inner.includes('المعنى') && !inner.includes('[')) {
+        const purged = inner
+          .replace(/\b([A-Za-z])\s+[\u0600-\u06FF]{1,4}\s+([a-zA-Z\u00C0-\u024F]{2,})/g, (_, c1, w2) =>
+            c1.toLowerCase() === w2.charAt(0).toLowerCase() ? w2.charAt(0).toUpperCase() + w2.slice(1) : `${c1} ${w2}`
+          )
+          .replace(/[\u0600-\u06FF]+/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        return `\`${purged}\``;
+      }
+      return fullMatch;
+    });
 
   // 🔗 1. دمج الكلمات الأجنبية المتجاورة المقطعة بـ backticks في كبسولة واحدة
   for (let pass = 0; pass < 4; pass++) {
@@ -569,18 +620,182 @@ const classifyLessonStationMeta = (lesson, indexInUnit = 0) => {
 
 
 // ============================================================================
-// 🧩 مكوّن "املأ الفراغ التفاعلي" في منتصف الدرس (Mid-Lesson Interactive Fill-in-the-Blank)
+// 🧩 مكوّن "املأ الفراغ التفاعلي" المدعوم بالمحلل الدلالي (Semantic Answer-Key Resolver)
 // ============================================================================
-const InlineFillBlankSentence = ({ rawText, onSpeak }) => {
+const SEMANTIC_TRANSLATION_ANCHORS = [
+  { ar: /البومة/, match: /\bEule\b/i },
+  { ar: /الشجرة/, match: /\bBaum\b/i },
+  { ar: /السيارة/, match: /\bAuto\b/i },
+  { ar: /المنزل|بيتي/, match: /\bHaus\b/i },
+  { ar: /الرحلة/, match: /\bReise\b/i },
+  { ar: /الجليد|المثلجات/, match: /\bEis\b/i },
+  { ar: /النبيذ/, match: /\bWein\b/i },
+  { ar: /الإيجار|إيجار/, match: /\bMiete\b/i },
+  { ar: /العملاق/, match: /\bRiese\b/i },
+  { ar: /الأغنية|أغنية/, match: /\bLied\b/i },
+  { ar: /الرسالة|رسالة/, match: /\bBrief\b/i },
+  { ar: /الحجر|حجر/, match: /\bStein\b/i },
+  { ar: /الساق/, match: /\bBein\b/i },
+  { ar: /المرج|الحقل/, match: /\bWiese\b/i },
+  { ar: /الناس/, match: /\bLeute\b/i },
+  { ar: /الصوت/, match: /\bLaut\b/i },
+  { ar: /العجلة|السرعة/, match: /\bEile\b/i },
+  { ar: /الفئران/, match: /\bMäuse\b/i },
+  { ar: /السهم/, match: /\bPfeil\b/i },
+  { ar: /الحبل/, match: /\bSeil\b/i },
+  { ar: /اللص/, match: /\b(Räuber|Dieb)\b/i },
+  { ar: /العشب/, match: /\bKraut\b/i },
+  { ar: /الكتاب/, match: /\bBuch\b/i },
+  { ar: /الكتب/, match: /\bBücher\b/i },
+  { ar: /الطاولة/, match: /\bTisch\b/i },
+  { ar: /المصباح|مصباح/, match: /\bLampe\b/i },
+  { ar: /الكراسة|الدفتر|كراسة/, match: /\bHeft\b/i },
+  { ar: /القلم|قلم/, match: /\bStift\b/i },
+  { ar: /الباب|باب/, match: /\bTür\b/i },
+  { ar: /الصورة|اللوحة/, match: /\bBild\b/i },
+  { ar: /الفستان/, match: /\bKleid\b/i },
+  { ar: /الحلم|حلم/, match: /\bTraum\b/i },
+  { ar: /العمود/, match: /\bSäule\b/i },
+  { ar: /الإمبراطور/, match: /\bKaiser\b/i },
+  { ar: /الشارع/, match: /\bStraße\b/i },
+  { ar: /الزيت|زيتاً/, match: /\bÖl\b/i },
+  { ar: /الدب\b/, match: /\bBär\b/i },
+  { ar: /الدبة/, match: /\bBärin\b/i },
+  { ar: /الكهف|كهف/, match: /\bHöhle\b/i },
+  { ar: /الفواكه/, match: /\bFrüchte\b/i },
+  { ar: /النهر/, match: /\bFluss\b/i },
+  { ar: /مبتل/, match: /\bnass\b/i },
+  { ar: /تحيات/, match: /\bGrüße\b/i },
+  { ar: /كبير|كبيرة/, match: /\bgroß\b/i },
+  { ar: /أبيض/, match: /\bweiß\b/i },
+  { ar: /بارد/, match: /\bkühl\b/i },
+  { ar: /أحييك|أحيي/, match: /\bgrüße\b/i },
+  { ar: /الملعقة/, match: /\bLöffel\b/i },
+  { ar: /الكوخ/, match: /\bHütte\b/i },
+  { ar: /التل\b/, match: /\bHügel\b/i },
+  { ar: /الأمهات/, match: /\bMütter\b/i },
+  { ar: /الأب\b/, match: /\bVater\b/i },
+  { ar: /الرجاء/, match: /\bBitte\b/i },
+  { ar: /الفتاة/, match: /\bMädchen\b/i },
+  { ar: /الأشجار/, match: /\bBäume\b/i },
+  { ar: /الجسر/, match: /\bBrücke\b/i },
+  { ar: /الملك/, match: /\bKönig\b/i },
+  { ar: /التفاحة|تفاحة/, match: /\bApfel\b/i },
+  { ar: /اللغة/, match: /\bSprache\b/i },
+  { ar: /وسط المدينة|مركز المدينة/, match: /\bStadtzentrum\b/i },
+  { ar: /الحليب|حليباً/, match: /\bMilch\b/i },
+  { ar: /المدرسة/, match: /\bSchule\b/i },
+  { ar: /الأفعى/, match: /\bSchlange\b/i },
+  { ar: /اللعبة/, match: /\bSpiel\b/i },
+  { ar: /الحقيبة|حقيبة/, match: /\bTasche\b/i },
+  { ar: /دراقة|الدراق/, match: /\bPfirsich\b/i },
+  { ar: /الضوء/, match: /\bLicht\b/i },
+  { ar: /الليل\b/, match: /\bNacht\b/i },
+  { ar: /الوجه|وجه/, match: /\bGesicht\b/i },
+  { ar: /شجرة الكرز/, match: /\bKirschenbaum\b/i },
+  { ar: /الكنيسة/, match: /\bKirche\b/i },
+  { ar: /رطلاً|الرطل/, match: /\bPfund\b/i },
+  { ar: /القشرة/, match: /\bSchale\b/i },
+  { ar: /الفلفل/, match: /\bPfeffer\b/i },
+  { ar: /المرآة/, match: /\bSpiegel\b/i },
+  { ar: /أختي|الأخت/, match: /\bSchwester\b/i },
+  { ar: /الفطيرة/, match: /\bPfannkuchen\b/i },
+  { ar: /الحصان/, match: /\bPferd\b/i },
+  { ar: /النجار/, match: /\bTischler\b/i },
+  { ar: /الكرسي/, match: /\b(Stuhl|Sessel)\b/i },
+  { ar: /النافذة/, match: /\bFenster\b/i },
+  { ar: /السرير|سرير/, match: /\bBett\b/i },
+  { ar: /الساعة/, match: /\bUhr\b/i },
+  { ar: /نبتة|النبتة/, match: /\bPflanze\b/i },
+  { ar: /الرف|رف\b/, match: /\bRegal\b/i },
+  { ar: /الخبز|خبزاً|خبز/, match: /\bBrot\b/i },
+  { ar: /موزة|الموزة/, match: /\bBanane\b/i },
+  { ar: /السبورة/, match: /\bTafel\b/i },
+  { ar: /القطة/, match: /\bKatze\b/i },
+  { ar: /الكلب/, match: /\bHund\b/i },
+  { ar: /العائلة/, match: /\bFamilie\b/i }
+];
+
+const resolveCorrectFillBlankOption = (rawOptions = [], fullLineText = '', vocabCards = []) => {
+  if (!Array.isArray(rawOptions) || rawOptions.length === 0) return { correctOption: '', cleanedOptions: [] };
+
+  // 1. دعم العلامة الصريحة (* أو ✓) إذا وُجدت في البيانات الجديدة
+  let explicitCorrect = null;
+  const cleanedOptions = [];
+  rawOptions.forEach(opt => {
+    const trimmed = String(opt || '').trim();
+    if (!trimmed) return;
+    if (/^[*✓✅]/.test(trimmed)) {
+      const stripped = trimmed.replace(/^[*✓✅]\s*/, '').trim();
+      explicitCorrect = stripped;
+      if (!cleanedOptions.includes(stripped)) cleanedOptions.push(stripped);
+    } else if (!cleanedOptions.includes(trimmed)) {
+      cleanedOptions.push(trimmed);
+    }
+  });
+
+  if (explicitCorrect) {
+    return { correctOption: explicitCorrect, cleanedOptions };
+  }
+
+  // 2. المطابقة الدلالية مع قاموس مفردات الشريحة/الدرس ومع الترجمة العربية في الجملة
+  for (const card of vocabCards) {
+    const cleanMeaning = (card.meaning || '').replace(/[🔵🔴🟢(der|die|das)]/gi, '').trim();
+    if (cleanMeaning && cleanMeaning.length >= 2 && fullLineText.includes(cleanMeaning)) {
+      const matchedOpt = cleanedOptions.find(
+        opt =>
+          opt.toLowerCase().includes((card.cleanSpeakableWord || card.word).toLowerCase()) ||
+          (card.word || '').toLowerCase().includes(opt.replace(/[🔵🔴🟢]/g, '').trim().toLowerCase())
+      );
+      if (matchedOpt) return { correctOption: matchedOpt, cleanedOptions };
+    }
+  }
+
+  // 3. المطابقة الدلالية عبر القاموس المرجعي المدمج (مثل: "أنا أرى البومة" -> "🔴 die Eule")
+  for (const anchor of SEMANTIC_TRANSLATION_ANCHORS) {
+    if (anchor.ar.test(fullLineText)) {
+      const matchedOpt = cleanedOptions.find(opt => anchor.match.test(opt));
+      if (matchedOpt) return { correctOption: matchedOpt, cleanedOptions };
+    }
+  }
+
+  // 4. التحقق من مطابقة أداة التنكير/التعريف السياقية في الألمانية (ein vs eine)
+  if (cleanedOptions.includes('ein') && cleanedOptions.includes('eine')) {
+    const afterBlankText = (fullLineText.split(']]')[1] || '').trim();
+    const femNouns = /^(Banane|Milch|Suppe|Lampe|Tasche|Tür|Uhr|Pflanze|Couch|Schale|Straße|Kirche|Brücke|Mutter|Frau|Familie|Katze|Schule|Tafel|Sprache)\b/;
+    if (femNouns.test(afterBlankText)) {
+      return { correctOption: 'eine', cleanedOptions };
+    }
+    return { correctOption: 'ein', cleanedOptions };
+  }
+
+  return { correctOption: cleanedOptions[0] || '', cleanedOptions };
+};
+
+const InlineFillBlankSentence = ({ rawText, onSpeak, vocabCards = [] }) => {
   const [selectedChoice, setSelectedChoice] = useState(null);
 
   const match = rawText.match(/\[\[([^\]]+)\]\]/);
   if (!match) return <span>{rawText}</span>;
 
-  const beforeBlank = rawText.slice(0, match.index);
+  // ✨ FIX: Phase 1 Semantic Answer-Key Resolver & Deduplicator
+  const rawBeforeBlank = rawText.slice(0, match.index);
   const afterBlank = rawText.slice(match.index + match[0].length);
-  const rawOptions = match[1].split('|').map(s => s.trim()).filter(Boolean);
-  const correctOption = rawOptions[0] || '';
+  const rawSplitOptions = match[1].split('|').map(s => s.trim()).filter(Boolean);
+  const { correctOption, cleanedOptions: rawOptions } = resolveCorrectFillBlankOption(
+    rawSplitOptions,
+    rawText,
+    vocabCards
+  );
+
+  // إذا كانت الكلمة أو الأداة الأولى في الإجابة الصحيحة مكتوبة مسبقاً قبل القوس مباشرة، نحذف تكرارها قبل الفراغ
+  const firstTokenOfCorrect = (correctOption.split(/\s+/)[0] || '').trim();
+  const beforeBlank =
+    firstTokenOfCorrect.length >= 2 &&
+    new RegExp(`\\b${firstTokenOfCorrect.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, 'i').test(rawBeforeBlank)
+      ? rawBeforeBlank.replace(new RegExp(`\\b${firstTokenOfCorrect.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, 'i'), '')
+      : rawBeforeBlank;
+
 
   const shuffledOptions = useMemo(() => {
     return [...rawOptions].sort((a, b) => a.localeCompare(b));
@@ -997,7 +1212,10 @@ const EditableLessonBlocks = ({
   onAiEditBlock,
   onAiInspireBlock,
   isOperating,
+  // ✨ FIX: استقبال activeLangConfig لمنع انهيار بطاقات الفم والنطق
+  activeLangConfig = { code: 'en-US', nameAr: 'الإنجليزية', nameEn: 'English', flag: '🇬🇧' },
   // 🎓 خصائص تجربة التلميذ التفاعلية الجديدة
+
   studentDisplayMode = 'scroll',
   activeSlideIdx = 0,
   setActiveSlideIdx = () => {},
@@ -1877,10 +2095,19 @@ const Classroom = () => {
       setActiveLesson(reordered[0]);
     }
 
-    if (statusMessage) setSurgeonStatusMsg(`⏳ ${statusMessage} (جاري الحفظ في السيرفر...)`);
+// ✨ FIX: LocalStorage Persistence - حفظ الدروس المطهرة في المتصفح فوراً حتى لو كان الكورس محلياً
+    try {
+      reordered.forEach(les => {
+        localStorage.setItem(`cherif_saved_lesson_${id}_${les._id}`, JSON.stringify(les));
+      });
+      const fullSnapshot = buildLiveCourseJSONSnapshot(reordered);
+      localStorage.setItem('cherif_active_local_course_json', JSON.stringify(fullSnapshot));
+    } catch (e) {}
+
+    if (statusMessage) setSurgeonStatusMsg(`⏳ ${statusMessage} (جاري الحفظ...)`);
     const synced = await syncCourseListToPlatformDB(reordered, true);
     if (statusMessage) {
-      setSurgeonStatusMsg(synced ? `✅ ${statusMessage} (تم الحفظ النهائي في قاعدة البيانات 💾)` : `✅ ${statusMessage}`);
+      setSurgeonStatusMsg(synced ? `✅ ${statusMessage} (تم الحفظ النهائي في قاعدة البيانات 💾)` : `✅ ${statusMessage} (تم الحفظ محلياً 💾)`);
     }
   };
 
@@ -1952,30 +2179,351 @@ const Classroom = () => {
   const [hideArabicHints, setHideArabicHints] = useState(false); // وضع الانغماس: تمويه الترجمة العربية
   const [xrayPhonicsMode, setXrayPhonicsMode] = useState(true); // وضع الأشعة الصوتية للحروف الصامتة والوصل
   const [isAutoNarratingSlide, setIsAutoNarratingSlide] = useState(false);
+// ============================================================================
+  // 🧠🏆 Phase 4: محرك الإتقان الحقيقي ذو الحالات الست (6-State Mastery) + التكرار المتباعد (SRS)
+  // ============================================================================
+  const MASTERY_STATES_META = {
+    not_started: {
+      id: 'not_started',
+      labelAr: 'لم يبدأ',
+      badgeClass: 'bg-slate-800/90 text-slate-400 border-slate-700',
+      dotClass: 'bg-slate-500'
+    },
+    learning: {
+      id: 'learning',
+      labelAr: 'قيد الدراسة 📖',
+      badgeClass: 'bg-sky-500/15 text-sky-300 border-sky-500/30',
+      dotClass: 'bg-sky-400'
+    },
+    practicing: {
+      id: 'practicing',
+      labelAr: 'يتدرب عملياً 🧩',
+      badgeClass: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40',
+      dotClass: 'bg-indigo-400'
+    },
+    provisionally_mastered: {
+      id: 'provisionally_mastered',
+      labelAr: 'إتقان مبدئي ⚡',
+      badgeClass: 'bg-teal-500/20 text-teal-300 border-teal-500/40',
+      dotClass: 'bg-teal-400'
+    },
+    mastered: {
+      id: 'mastered',
+      labelAr: 'متقَن ومثبّت 🏆',
+      badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
+      dotClass: 'bg-emerald-400'
+    },
+    needs_review: {
+      id: 'needs_review',
+      labelAr: 'يحتاج مراجعة 🔄',
+      badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+      dotClass: 'bg-amber-400'
+    }
+  };
+
+  // فترات المراجعة المتباعدة لصناديق لايتنر الخمسة (بالأيام: 0.5 يوم، 1 يوم، 3 أيام، 7 أيام، 14 يوماً)
+  const SRS_BOX_INTERVALS_MS = {
+    1: 12 * 60 * 60 * 1000,
+    2: 24 * 60 * 60 * 1000,
+    3: 3 * 24 * 60 * 60 * 1000,
+    4: 7 * 24 * 60 * 60 * 1000,
+    5: 14 * 24 * 60 * 60 * 1000
+  };
+
+  const [lessonMasteryMap, setLessonMasteryMap] = useState(() => {
+    try {
+      const saved = localStorage.getItem(`cherif_mastery_map_${id}`);
+      return saved ? JSON.parse(saved) : {};
+    } catch (e) {
+      return {};
+    }
+  });
+
+  const updateLessonMasterySignal = (lessonId, signalType, passed = true) => {
+    if (!lessonId) return;
+    setLessonMasteryMap(prev => {
+      const current = prev[lessonId] || {
+        state: 'not_started',
+        signals: { opened: false, practiceDone: false, writingVerified: false, quizPassed: false, voicePracticed: false, delayedReviewPassed: false },
+        updatedAt: Date.now()
+      };
+
+      const nextSignals = { ...current.signals };
+      if (signalType === 'open') nextSignals.opened = true;
+      if (signalType === 'practice' && passed) nextSignals.practiceDone = true;
+      if (signalType === 'writing' && passed) nextSignals.writingVerified = true;
+      if (signalType === 'quiz' && passed) nextSignals.quizPassed = true;
+      if (signalType === 'voice' && passed) nextSignals.voicePracticed = true;
+      if (signalType === 'srs_review') {
+        nextSignals.delayedReviewPassed = passed;
+      }
+
+      const activeSignalsCount = [
+        nextSignals.practiceDone,
+        nextSignals.writingVerified,
+        nextSignals.quizPassed,
+        nextSignals.voicePracticed
+      ].filter(Boolean).length;
+
+      let nextState = current.state;
+      if (signalType === 'quiz_failed' || (signalType === 'srs_review' && !passed)) {
+        nextState = 'needs_review';
+      } else if (nextSignals.delayedReviewPassed && activeSignalsCount >= 2) {
+        nextState = 'mastered';
+      } else if (activeSignalsCount >= 2 || (nextSignals.quizPassed && nextSignals.writingVerified)) {
+        nextState = current.state === 'mastered' ? 'mastered' : 'provisionally_mastered';
+      } else if (activeSignalsCount === 1 || signalType === 'practice') {
+        nextState = ['provisionally_mastered', 'mastered'].includes(current.state) ? current.state : 'practicing';
+      } else if (nextSignals.opened && current.state === 'not_started') {
+        nextState = 'learning';
+      }
+
+      const nextMap = {
+        ...prev,
+        [lessonId]: {
+          state: nextState,
+          signals: nextSignals,
+          updatedAt: Date.now(),
+          reviewDueAt: nextState === 'provisionally_mastered' ? Date.now() + 3 * 24 * 60 * 60 * 1000 : null
+        }
+      };
+
+      try {
+        localStorage.setItem(`cherif_mastery_map_${id}`, JSON.stringify(nextMap));
+      } catch (e) {}
+      return nextMap;
+    });
+  };
+
+  const getEffectiveLessonMasteryState = (lessonId) => {
+    if (!lessonId) return MASTERY_STATES_META.not_started;
+    const record = lessonMasteryMap[lessonId];
+    if (!record) {
+      return completedLessons.includes(lessonId)
+        ? MASTERY_STATES_META.provisionally_mastered
+        : MASTERY_STATES_META.not_started;
+    }
+    if (record.state === 'provisionally_mastered' && record.reviewDueAt && Date.now() > record.reviewDueAt) {
+      return MASTERY_STATES_META.needs_review;
+    }
+    return MASTERY_STATES_META[record.state] || MASTERY_STATES_META.learning;
+  };
+
   const [savedStudentWords, setSavedStudentWords] = useState(() => {
     try {
       const saved = localStorage.getItem(`cherif_vocab_bank_${id}`);
-      return saved ? JSON.parse(saved) : [];
+      const parsed = saved ? JSON.parse(saved) : [];
+      return parsed.map(item => ({
+        ...item,
+        boxLevel: item.boxLevel || 1,
+        correctCount: item.correctCount || 0,
+        incorrectCount: item.incorrectCount || 0,
+        lastReviewedAt: item.lastReviewedAt || item.addedAt || Date.now(),
+        nextReviewAt: item.nextReviewAt || Date.now()
+      }));
     } catch (e) {
       return [];
     }
   });
   const [showVocabDrawer, setShowVocabDrawer] = useState(false);
 
-  // ⭐ حفظ أو إزالة كلمة من محفظة التلميذ الذكية
-  const toggleSaveStudentWord = (wordText, meaningText = '') => {
-    const cleanW = (wordText || '').trim();
+  // حالات جلسة المراجعة المتباعدة والاسترجاع النشط (SRS Active Recall Session)
+  const [srsQuizSession, setSrsQuizSession] = useState(null);
+  const [srsTypedAnswer, setSrsTypedAnswer] = useState('');
+
+  // ⭐ حفظ أو إزالة كلمة من محفظة التلميذ الذكية مع بيانات التكرار المتباعد (SRS)
+  const toggleSaveStudentWord = (wordText, meaningText = '', ipaHint = '', exampleSent = '') => {
+    const cleanW = (wordText || '').replace(/[🔵🔴🟢]/g, '').trim();
     if (!cleanW) return;
     setSavedStudentWords(prev => {
       const exists = prev.some(item => item.word.toLowerCase() === cleanW.toLowerCase());
       const next = exists
         ? prev.filter(item => item.word.toLowerCase() !== cleanW.toLowerCase())
-        : [...prev, { word: cleanW, meaning: meaningText, lessonTitle: activeLesson?.title || '', addedAt: Date.now() }];
+        : [
+            ...prev,
+            {
+              word: cleanW,
+              meaning: meaningText || '',
+              langCode: activeLangConfig.code || 'en-US',
+              pronunciationHint: ipaHint || '',
+              exampleSentence: exampleSent || '',
+              lessonId: activeLesson?._id || '',
+              lessonTitle: activeLesson?.title || '',
+              correctCount: 0,
+              incorrectCount: 0,
+              boxLevel: 1,
+              addedAt: Date.now(),
+              lastReviewedAt: Date.now(),
+              nextReviewAt: Date.now() // مستحقة للمراجعة الأولى فوراً لتثبيتها
+            }
+          ];
       try {
         localStorage.setItem(`cherif_vocab_bank_${id}`, JSON.stringify(next));
       } catch (e) {}
       return next;
     });
+  };
+
+  // 📥 استيراد جميع مفردات الدرس الحالي دفعة واحدة إلى محفظة التكرار المتباعد (SRS)
+  const handleHarvestCurrentLessonVocabToSRS = () => {
+    const tableCards = extractVocabularyTableCards(activeLesson?.content || '');
+    const studioCards = (audioStudioItems || []).map(item => ({
+      cleanSpeakableWord: item.sentence,
+      meaning: item.meaning,
+      ipa: item.ipa
+    }));
+    const combined = [...tableCards, ...studioCards].filter(c => c.cleanSpeakableWord && c.meaning);
+    if (combined.length === 0) return;
+
+    setSavedStudentWords(prev => {
+      const copy = [...prev];
+      combined.forEach(card => {
+        const cleanW = (card.cleanSpeakableWord || card.word || '').replace(/[🔵🔴🟢]/g, '').trim();
+        if (!cleanW) return;
+        if (!copy.some(item => item.word.toLowerCase() === cleanW.toLowerCase())) {
+          copy.push({
+            word: cleanW,
+            meaning: card.meaning || '',
+            langCode: activeLangConfig.code || 'en-US',
+            pronunciationHint: card.ipa || '',
+            exampleSentence: '',
+            lessonId: activeLesson?._id || '',
+            lessonTitle: activeLesson?.title || '',
+            correctCount: 0,
+            incorrectCount: 0,
+            boxLevel: 1,
+            addedAt: Date.now(),
+            lastReviewedAt: Date.now(),
+            nextReviewAt: Date.now()
+          });
+        }
+      });
+      try {
+        localStorage.setItem(`cherif_vocab_bank_${id}`, JSON.stringify(copy));
+      } catch (e) {}
+      return copy;
+    });
+    updateLessonMasterySignal(activeLesson?._id, 'practice', true);
+  };
+
+  // 🧠 بدء جلسة الاسترجاع النشط والتكرار المتباعد (Active Recall SRS Quiz)
+  const startSRSActiveRecallSession = () => {
+    if (savedStudentWords.length === 0) return;
+    const now = Date.now();
+    const dueWords = savedStudentWords.filter(w => !w.nextReviewAt || w.nextReviewAt <= now);
+    const pool = (dueWords.length > 0 ? dueWords : [...savedStudentWords])
+      .sort((a, b) => (a.boxLevel || 1) - (b.boxLevel || 1))
+      .slice(0, 8);
+
+    const buildQuestionForIndex = (qIdx, list) => {
+      const target = list[qIdx];
+      if (!target) return null;
+      const modes = ['reverse_mc', 'audio_mc', 'written_recall'];
+      const mode = target.meaning ? modes[qIdx % modes.length] : 'written_recall';
+      const distractors = savedStudentWords
+        .filter(w => w.word.toLowerCase() !== target.word.toLowerCase())
+        .sort(() => Math.random() - 0.5)
+        .slice(0, 3);
+      const options = [target, ...distractors].sort(() => Math.random() - 0.5);
+
+      if (mode === 'audio_mc') {
+        handlePlayAudioText(target.word, studentDefaultSpeed, `srs_q_${qIdx}`);
+      }
+      return {
+        queue: list,
+        currentIndex: qIdx,
+        target,
+        mode,
+        options,
+        feedback: null,
+        sessionCorrect: 0,
+        sessionTotal: list.length
+      };
+    };
+
+    setSrsTypedAnswer('');
+    setSrsQuizSession(buildQuestionForIndex(0, pool));
+  };
+
+  const handleAnswerSRSQuestion = (studentAnswerStr) => {
+    if (!srsQuizSession || srsQuizSession.feedback) return;
+    const { target, queue, currentIndex, sessionCorrect } = srsQuizSession;
+    const cleanExpected = target.word.replace(/[.,?!]/g, '').trim().toLowerCase();
+    const cleanGiven = String(studentAnswerStr || '').replace(/[.,?!]/g, '').trim().toLowerCase();
+    const isCorrect = cleanGiven === cleanExpected;
+
+    handlePlayAudioText(target.word, studentDefaultSpeed, `srs_ans_${currentIndex}`);
+
+    // تحديث صندوق Leitner (1..5) وموعد المراجعة القادم
+    setSavedStudentWords(prev => {
+      const updated = prev.map(item => {
+        if (item.word.toLowerCase() !== target.word.toLowerCase()) return item;
+        const currentBox = item.boxLevel || 1;
+        const nextBox = isCorrect ? Math.min(5, currentBox + 1) : 1;
+        const intervalMs = SRS_BOX_INTERVALS_MS[nextBox] || SRS_BOX_INTERVALS_MS[1];
+        return {
+          ...item,
+          boxLevel: nextBox,
+          correctCount: (item.correctCount || 0) + (isCorrect ? 1 : 0),
+          incorrectCount: (item.incorrectCount || 0) + (isCorrect ? 0 : 1),
+          lastReviewedAt: Date.now(),
+          nextReviewAt: Date.now() + intervalMs
+        };
+      });
+      try {
+        localStorage.setItem(`cherif_vocab_bank_${id}`, JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+
+    if (target.lessonId) {
+      updateLessonMasterySignal(target.lessonId, 'srs_review', isCorrect);
+    }
+
+    setSrsQuizSession(prev => ({
+      ...prev,
+      sessionCorrect: sessionCorrect + (isCorrect ? 1 : 0),
+      feedback: {
+        isCorrect,
+        message: isCorrect
+          ? `✅ استرجاع نشط ممتاز! ارتقت مفردة (${target.word}) إلى الصندوق ${Math.min(5, (target.boxLevel || 1) + 1)}/5.`
+          : `❌ الإجابة الصحيحة هي (${target.word}). أُعيدت المفردة إلى الصندوق 1 لتكثيف مراجعتها.`
+      }
+    }));
+  };
+
+  const handleNextSRSQuestion = () => {
+    if (!srsQuizSession) return;
+    const nextIdx = srsQuizSession.currentIndex + 1;
+    if (nextIdx >= srsQuizSession.queue.length) {
+      if (activeLesson?._id && srsQuizSession.sessionCorrect >= Math.ceil(srsQuizSession.sessionTotal * 0.75)) {
+        updateLessonMasterySignal(activeLesson._id, 'srs_review', true);
+      }
+      setSrsQuizSession(prev => ({ ...prev, isFinished: true }));
+      return;
+    }
+
+    const nextTarget = srsQuizSession.queue[nextIdx];
+    const modes = ['reverse_mc', 'audio_mc', 'written_recall'];
+    const mode = nextTarget.meaning ? modes[nextIdx % modes.length] : 'written_recall';
+    const distractors = savedStudentWords
+      .filter(w => w.word.toLowerCase() !== nextTarget.word.toLowerCase())
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 3);
+    const options = [nextTarget, ...distractors].sort(() => Math.random() - 0.5);
+
+    if (mode === 'audio_mc') {
+      handlePlayAudioText(nextTarget.word, studentDefaultSpeed, `srs_q_${nextIdx}`);
+    }
+    setSrsTypedAnswer('');
+    setSrsQuizSession(prev => ({
+      ...prev,
+      currentIndex: nextIdx,
+      target: nextTarget,
+      mode,
+      options,
+      feedback: null
+    }));
   };
 
   // 🎧 المُحاضر الصوتي التلقائي للشريحة (يقرأ جميع الأمثلة الأجنبية في الشريحة بالتتابع!)
@@ -2286,26 +2834,56 @@ const Classroom = () => {
         });
       });
 
+// ✨ FIX: إصلاح اسم المتغير ليطابق مصفوفة دروس الوحدة (cleanedLessonsList)
       await commitLessonsListUpdate(
         cleanedLessonsList,
-        `تم ترتيب الوحدة (${targetSectionName}) وتنسيق دروسها بنجاح (تم حذف ${removedLessonsCount} دروس مكررة وتنظيف الحشو الداخلي)!`
+        `تم ترتيب الوحدة (${targetSectionName}) وتنسيق دروسها بنجاح (تم حذف ${removedLessonsCount} دروس مكررة)!`
       );
     } finally {
       setIsOperatingLesson(false);
     }
   };
 
-  // 3. 🧹 ترتيب الكراش كورس بالكامل (توحيد الوحدات المتشابهة + حذف الدروس المكررة + ترتيب محتوى كل الدروس)
-  const handleOrganizeAndDedupeFullCourse = async () => {
-    if (!window.confirm('هل تريد ترتيب الكراش كورس بالكامل، دمج/حذف الدروس والعناصر المكررة، وتنسيق اللغات في جميع الوحدات؟')) return;
+  // ✨ FIX: Automated 3-Layer QA Linter Trigger - فحص وتطهير المنهج آلياً (البنية + اللغات الـ 7 + التمارين + حلقات التكرار)
+  const handleRunAutomatedCourseLinter = async () => {
     setIsOperatingLesson(true);
-    setSurgeonStatusMsg('🌍🧹 جاري فحص وترتيب الكراش كورس بالكامل وحذف جميع التكرارات عبر الوحدات والدروس...');
+    setSurgeonStatusMsg('🛡️ جاري تشغيل الفاحص الآلي (QA Linter) لفحص البنية، تطهير تداخل اللغات، وإصلاح التمارين وحلقات التكرار...');
+    try {
+      const res = await axios.post('http://localhost:5000/api/academy2/surgeon/lint-course', {
+        lessonsList: lessons,
+        langCode: activeLangConfig.code
+      });
+
+      if (res.data?.success && Array.isArray(res.data.healedLessons)) {
+        const { report, healedLessons } = res.data;
+        await commitLessonsListUpdate(
+          healedLessons,
+          `اكتمل الفحص الآلي (QA Linter): تم فحص ${report.totalLessonsScanned} درساً، إصلاح ${report.totalIssuesFixed} أخطاء لغوية/بنيوية، وحذف ${report.duplicateLessonsRemoved} دروس مكررة!`
+        );
+      }
+    } catch (err) {
+      // مسار طوارئ محلي في حال عدم اتصال الخادم 5000
+      await handleOrganizeAndDedupeFullCourse();
+    } finally {
+      setIsOperatingLesson(false);
+    }
+  };
+
+// ✨ FIX: Automated Curriculum Linter & Auto-Healer (يفحص بنية JSON، يكشف حلقات التكرار Loop، ويصلح التمارين والاختبارات)
+  const handleOrganizeAndDedupeFullCourse = async () => {
+    if (!window.confirm('هل تريد تشغيل الفاحص والمصلح الآلي (JSON Linter) على الكورس بالكامل لكشف حلقات التكرار، إصلاح التمارين، وتنسيق اللغات؟')) return;
+    setIsOperatingLesson(true);
+    setSurgeonStatusMsg('🌍🔍 جاري تشغيل الفاحص الآلي (JSON Linter) على جميع الوحدات والدروس والاختبارات...');
 
     try {
       const seenGlobalLessonKeys = new Set();
+      const seenContentSignatures = new Set();
       const canonicalUnitNamesMap = {};
       const cleanedCourseLessons = [];
+
       let removedDuplicatesCount = 0;
+      let fixedQuizzesCount = 0;
+      let fixedContaminationCount = 0;
 
       lessons.forEach(les => {
         const rawSec = (les.section || 'الوحدة 1').trim();
@@ -2320,32 +2898,76 @@ const Classroom = () => {
         const finalSecName = canonicalUnitNamesMap[normSecKey];
 
         const normLessonTitle = (les.title || '')
-          .replace(/^(?:الدرس|درس)\s*\d+\s*[:-]?\s*/i, '')
+          .replace(/^(?:الدرس|درس|محطة)\s*\d+\s*[:-]?\s*/i, '')
           .replace(/[^\p{L}\p{N}]/gu, '')
           .toLowerCase();
 
+        // كشف تكرار العنوان أو تكرار المحتوى (Infinite Loop Detection كما حدث في كورس الإنجليزية)
+        const contentSig = (les.content || '').replace(/[^\p{L}\p{N}]/gu, '').slice(0, 220).toLowerCase();
         const uniqueLessonKey = `${normSecKey}__${normLessonTitle}`;
-        if (normLessonTitle && seenGlobalLessonKeys.has(uniqueLessonKey)) {
+
+        if (
+          (normLessonTitle && seenGlobalLessonKeys.has(uniqueLessonKey)) ||
+          (contentSig.length > 80 && seenContentSignatures.has(contentSig))
+        ) {
           removedDuplicatesCount++;
-          return; // حذف الدرس المكرر
+          return; // تخطي وحذف الدرس المكرر الناتج عن Loop
         }
         if (normLessonTitle) seenGlobalLessonKeys.add(uniqueLessonKey);
+        if (contentSig.length > 80) seenContentSignatures.add(contentSig);
+
+        const rawContent = les.content || '';
+        const cleanedContent = formatAndDeduplicateMarkdown(rawContent);
+        if (cleanedContent !== rawContent) fixedContaminationCount++;
+
+        // فحص وإصلاح dailyQuest (التأكد من عدم تكرار الخيارات وصحة مؤشر الإجابة الصحيحة)
+        let healedDailyQuest = les.dailyQuest;
+        if (healedDailyQuest && Array.isArray(healedDailyQuest.options)) {
+          const uniqueOpts = [...new Set(healedDailyQuest.options.map(o => String(o).trim()).filter(Boolean))];
+          const origCorrectText = healedDailyQuest.options[healedDailyQuest.correctAnswerIndex];
+          let newCorrectIdx = uniqueOpts.indexOf(String(origCorrectText || '').trim());
+          if (newCorrectIdx < 0 || newCorrectIdx >= uniqueOpts.length) {
+            newCorrectIdx = 0;
+            fixedQuizzesCount++;
+          }
+          if (uniqueOpts.length !== healedDailyQuest.options.length) fixedQuizzesCount++;
+          healedDailyQuest = { ...healedDailyQuest, options: uniqueOpts, correctAnswerIndex: newCorrectIdx };
+        }
+
+        // فحص وإصلاح bossQuiz (في بوابات الزعيم والامتحانات)
+        let healedBossQuiz = les.bossQuiz;
+        if (Array.isArray(healedBossQuiz) && healedBossQuiz.length > 0) {
+          healedBossQuiz = healedBossQuiz.map(q => {
+            if (!q || !Array.isArray(q.options)) return q;
+            const uniqueOpts = [...new Set(q.options.map(o => String(o).trim()).filter(Boolean))];
+            const origCorrectText = q.options[q.correctAnswerIndex];
+            let newCorrectIdx = uniqueOpts.indexOf(String(origCorrectText || '').trim());
+            if (newCorrectIdx < 0 || newCorrectIdx >= uniqueOpts.length) {
+              newCorrectIdx = 0;
+              fixedQuizzesCount++;
+            }
+            return { ...q, options: uniqueOpts, correctAnswerIndex: newCorrectIdx };
+          });
+        }
 
         cleanedCourseLessons.push({
           ...les,
           section: finalSecName,
-          content: formatAndDeduplicateMarkdown(les.content || '')
+          content: cleanedContent,
+          dailyQuest: healedDailyQuest,
+          bossQuiz: healedBossQuiz
         });
       });
 
-      await commitLessonsListUpdate(
-        cleanedCourseLessons,
-        `تم ترتيب الكراش كورس بالكامل وتنسيق جميع دروسه بنجاح (تم تنظيف ${removedDuplicatesCount} عناصر/دروس مكررة)!`
-      );
+      const auditReport = `تم الفحص والإصلاح الآلي (JSON Linter): حذف (${removedDuplicatesCount}) دروس مكررة/Loop، تنقية (${fixedContaminationCount}) نصوص، وإصلاح (${fixedQuizzesCount}) أسئلة/خيارات!`;
+      await commitLessonsListUpdate(cleanedCourseLessons, auditReport);
     } finally {
       setIsOperatingLesson(false);
     }
   };
+
+
+
 
   // 4. ➕ دالة إضافة وحدة جديدة بالكامل للكورس (مهمة جداً لنافذة جراح الكورس)
   const handleAddNewUnitToCourse = async (customUnitName = '', proposedLessonsTitles = []) => {
@@ -2831,14 +3453,121 @@ const Classroom = () => {
   };
 
   // ============================================================================
-  // 🔄 دوال استرجاع وبناء الكورس وملفات JSON
+  // 🔄 دوال تطبيع وترتيب الكورسات واسترجاع ملفات JSON (Phase 1 Course Order & Guide Sync)
   // ============================================================================
-  const hydrateSingleCourseObject = (courseJson, parentCertTitle = '', parentTargetLang = '', parentSpeechLang = '') => {
+  const computePedagogicalCourseWeight = (courseObj, fallbackIdx = 0) => {
+    const title = `${courseObj?.courseTitle || ''} ${courseObj?.title || ''}`.toLowerCase();
+    const diff = `${courseObj?.difficultyLevel || ''} ${courseObj?.difficulty || ''}`.toLowerCase();
+    const combined = `${diff} ${title}`;
+
+    const isExamCourse = /exam|goethe|testdaf|delf|dalf|ielts|toefl|jlpt|hsk|topik|dele|امتحان|اختبار/i.test(combined);
+
+    if (/pre-a1|a0\.1|phonics|الأبجدية|الحروف/i.test(combined)) return 10 + fallbackIdx * 0.01;
+    if (/a0\.2|a0\b/i.test(combined)) return 20 + fallbackIdx * 0.01;
+    if (/a1\.1/i.test(combined)) return 30 + fallbackIdx * 0.01;
+    if (/a1\.2/i.test(combined)) return 35 + fallbackIdx * 0.01;
+    if (/(?<!pre-)a1\b/i.test(combined)) return (isExamCourse ? 39 : 32) + fallbackIdx * 0.01;
+    if (/a2\.1/i.test(combined)) return 40 + fallbackIdx * 0.01;
+    if (/a2\.2/i.test(combined)) return 45 + fallbackIdx * 0.01;
+    if (/a2\b/i.test(combined)) return (isExamCourse ? 49 : 42) + fallbackIdx * 0.01;
+    if (/b1\.1/i.test(combined)) return 50 + fallbackIdx * 0.01;
+    if (/b1\.2/i.test(combined)) return 54 + fallbackIdx * 0.01;
+    if (/b1\.5|b1\+/i.test(combined)) return 57 + fallbackIdx * 0.01;
+    if (/b1\b/i.test(combined)) return (isExamCourse ? 59 : 52) + fallbackIdx * 0.01;
+    if (/b2\.1/i.test(combined)) return 60 + fallbackIdx * 0.01;
+    if (/b2\.2/i.test(combined)) return 62 + fallbackIdx * 0.01;
+    if (/b2\.3/i.test(combined)) return 64 + fallbackIdx * 0.01;
+    if (/b2\.4/i.test(combined)) return 66 + fallbackIdx * 0.01;
+    // ✨ FIX: وضع امتحان B2 (Goethe B2) في نهاية مجموعة B2 مباشرة (وزن 69) قبل بدء C1.1 (وزن 70)!
+    if (/b2\b/i.test(combined)) return (isExamCourse ? 69 : 65) + fallbackIdx * 0.01;
+    if (/c1\.1/i.test(combined)) return 70 + fallbackIdx * 0.01;
+    if (/c1\.2/i.test(combined)) return 72 + fallbackIdx * 0.01;
+    if (/c1\.3/i.test(combined)) return 74 + fallbackIdx * 0.01;
+    if (/c1\.4/i.test(combined)) return 76 + fallbackIdx * 0.01;
+    if (/testdaf/i.test(combined) && !/c2/i.test(combined)) return 78 + fallbackIdx * 0.01;
+    if (/c1\b/i.test(combined)) return (isExamCourse ? 79 : 75) + fallbackIdx * 0.01;
+    if (/c2\.1/i.test(combined)) return 80 + fallbackIdx * 0.01;
+    if (/c2/i.test(combined)) return (isExamCourse ? 89 : 84 + fallbackIdx * 0.1);
+
+    return 50 + fallbackIdx;
+  };
+
+  const normalizeAndSortCertificateCourses = (rawJson) => {
+    if (!rawJson || typeof rawJson !== 'object') return rawJson;
+    if (!Array.isArray(rawJson.courses) || rawJson.courses.length === 0) return rawJson;
+
+    const sortedCourses = [...rawJson.courses]
+      .map((c, idx) => ({ c, idx, weight: computePedagogicalCourseWeight(c, idx) }))
+      .sort((a, b) => a.weight - b.weight)
+      .map(({ c }, newIdx) => {
+        const orderNum = newIdx + 1;
+        const cleanBaseTitle = cleanCourseTitleText(c.courseTitle || c.title || `المسار ${orderNum}`)
+          .replace(/^(?:الكراش كورس|كراش كورس|الكورس|كورس)\s*\d+\s*[:-]?\s*/i, '')
+          .trim();
+
+        // فصل مسمى TestDaF الأكاديمي عن Goethe C2 إذا دُمجا في عنوان واحد
+        const refinedTitle = cleanBaseTitle.replace(
+          /TestDaF\s*و\s*Goethe\s*C1\/C2/gi,
+          'Goethe-Zertifikat C2 & المسار الأكاديمي المتقدم'
+        );
+
+        const hoursMatch = String(c.estimatedHours || '18').match(/\d+/);
+        const totalHours = hoursMatch ? parseInt(hoursMatch[0], 10) : 18;
+
+        return {
+          ...c,
+          courseId: c.courseId || c._id || `cert_course_${orderNum}`,
+          courseOrder: orderNum,
+          coursePrefix: `الكراش كورس ${orderNum}`,
+          courseTitle: `كراش كورس ${orderNum}: ${refinedTitle}`,
+          guidedLearningHours: c.guidedLearningHours || totalHours,
+          independentPracticeHours: c.independentPracticeHours || Math.round(totalHours * 1.5)
+        };
+      });
+
+    const normalizedJson = {
+      ...rawJson,
+      courses: sortedCourses
+    };
+
+    // مزامنة detailedCoursesGuide تلقائياً مع مصفوفة courses الموحدة لمنع التضارب (23 مقابل 20)
+    if (normalizedJson.masterDossier) {
+      normalizedJson.masterDossier = {
+        ...normalizedJson.masterDossier,
+        detailedCoursesGuide: sortedCourses.map((c, idx) => {
+          const existingGuide =
+            (normalizedJson.masterDossier.detailedCoursesGuide || []).find(
+              g => cleanCourseTitleText(g.courseTitle) === cleanCourseTitleText(c.courseTitle)
+            ) || {};
+          return {
+            ...existingGuide,
+            courseOrder: idx + 1,
+            coursePrefix: c.coursePrefix,
+            courseTitle: c.courseTitle,
+            description: c.courseDescription || c.description || existingGuide.description || '',
+            estimatedHours: c.estimatedHours || '18 ساعة',
+            guidedLearningHours: c.guidedLearningHours,
+            independentPracticeHours: c.independentPracticeHours,
+            certificateBadge: c.certificateBadge || existingGuide.certificateBadge || `شهادة إتمام ${c.coursePrefix}`,
+            deepExplanation:
+              existingGuide.deepExplanation ||
+              `${c.courseDescription || c.description || ''} — يشمل ${c.guidedLearningHours} ساعة تعلم موجه و${c.independentPracticeHours} ساعة ممارسة مستقلة.`
+          };
+        })
+      };
+    }
+
+    return normalizedJson;
+  };
+
+  const hydrateSingleCourseObject = (courseJson, parentCertTitle = '', parentTargetLang = '', parentSpeechLang = '', explicitCourseOrder = null) => {
+    
     if (!courseJson) return false;
     const cleanedTitle = cleanCourseTitleText(courseJson.courseTitle || courseJson.title || 'كراش كورس تفاعلي');
+    const resolvedOrder = Number(explicitCourseOrder) || Number(courseJson.courseOrder) || (activeCertCourseIdx + 1) || 1;
     const courseObj = {
-      _id: courseJson._id || id || 'local_course_id',
-      courseOrder: courseJson.courseOrder || 1,
+      _id: courseJson.courseId || courseJson._id || id || `course_order_${resolvedOrder}`,
+      courseOrder: resolvedOrder,
       title: cleanedTitle,
       parentCertTitle: parentCertTitle || courseJson.parentCertTitle || '',
       targetLanguage: courseJson.targetLanguage || parentTargetLang || '',
@@ -2892,22 +3621,27 @@ const Classroom = () => {
     return true;
   };
 
+
   const hydrateFromRawCourseJSON = (rawJson, targetCourseIdx = 0) => {
     if (!rawJson) return false;
-    if (Array.isArray(rawJson.courses) && rawJson.courses.length > 0) {
-      setCertificateCoursesList(rawJson.courses);
-      const validIdx = Math.min(targetCourseIdx, rawJson.courses.length - 1);
+    const normalizedCert = normalizeAndSortCertificateCourses(rawJson);
+    if (Array.isArray(normalizedCert.courses) && normalizedCert.courses.length > 0) {
+      setCertificateCoursesList(normalizedCert.courses);
+      const validIdx = Math.min(targetCourseIdx, normalizedCert.courses.length - 1);
       setActiveCertCourseIdx(validIdx);
       return hydrateSingleCourseObject(
-        rawJson.courses[validIdx],
-        rawJson.certificateTitle || rawJson.courseTitle,
-        rawJson.targetLanguage || '',
-        rawJson.speechLang || ''
+        normalizedCert.courses[validIdx],
+        normalizedCert.certificateTitle || normalizedCert.courseTitle,
+        normalizedCert.targetLanguage || '',
+        normalizedCert.speechLang || '',
+        validIdx + 1
       );
     }
     setCertificateCoursesList([]);
-    return hydrateSingleCourseObject(rawJson, rawJson.parentCertTitle || '', rawJson.targetLanguage || '', rawJson.speechLang || '');
+    return hydrateSingleCourseObject(normalizedCert, normalizedCert.parentCertTitle || '', normalizedCert.targetLanguage || '', normalizedCert.speechLang || '', 1);
   };
+
+
 
   const handleSwitchCertificateCourse = (cIdx) => {
     if (!certificateCoursesList[cIdx]) return;
@@ -3093,12 +3827,16 @@ const Classroom = () => {
         cleanSpoken.includes(cleanTarget)
       );
 
+// ✨ FIX: Speech Recognition Clarification - تمييز الفحص كمطابقة نصية للصوت المسموع (STT Match)
       setSpeechCheckResult({
         rowIndex,
         spoken,
         target: targetSentence,
-        isGoodMatch
+        isGoodMatch,
+        recognitionType: 'browser_stt_match'
       });
+
+
       setListeningRowIdx(null);
     };
     recognition.onerror = () => setListeningRowIdx(null);
@@ -3248,274 +3986,240 @@ const Classroom = () => {
   // ============================================================================
   // 🧠🎙️ المحرك الثلاثي الذكي وحصة المحادثة (Voice Coach)
   // ============================================================================
+
+// ✨ FIX: Phase 2 Zero-Bleed 7-Language Contextual Engine (دعم أصيل للغات السبع بدون أي تسرب إنجليزي أو درجات وهمية)
+  const cleanSpeakableTargetPhrase = (raw = '') =>
+    String(raw || '')
+      .replace(/[🔵🔴🟢🎌🏮🇰🇷]/g, '')
+      .replace(/\([^)]*[\u0600-\u06FF]+[^)]*\)/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
   const generateSmartContextualFallback = (spokenText, turnIdx, mode, currentTargetIdx = 0) => {
     const fullCtx = `${course?.parentCertTitle || ''} ${course?.title || ''} ${course?.difficulty || ''} ${activeLesson?.section || ''} ${activeLesson?.title || ''}`;
     const cOrder = Number(course?.courseOrder) || (activeCertCourseIdx + 1) || 1;
     const isZeroLevel = cOrder <= 3 || /Pre-A1|A0|الحروف|أصوات|Phonics|CVC|الثلاثية|القصيرة جداً|كورس 1\b|كورس 2\b|كورس 3\b/i.test(fullCtx);
-    const isFrench = activeLangConfig.code === 'fr-FR';
+    const isAdvancedLevel = cOrder >= 13 || /\b(C1|C2|B2|TestDaF|DALF|IELTS|JLPT N1|JLPT N2|HSK 5|HSK 6|TOPIK II)\b/i.test(fullCtx);
+    const langCode = activeLangConfig.code || 'en-US';
+    const langPrefix = langCode.split('-')[0].toLowerCase();
 
-    const defaultFallbackVocab = isFrench
-      ? (isZeroLevel ? ['un chat', 'un livre', 'une table', 'bonjour'] : ['prendre une décision', 'avoir besoin de', 'à mon avis'])
-      : (isZeroLevel ? ['a cat', 'a mat', 'a red cup', 'in the sun'] : ['make a decision', 'take a break', 'heavy rain', 'have a great time']);
-
-    const targets = lessonTargetVocabulary.length > 0 ? lessonTargetVocabulary : defaultFallbackVocab;
-    const tCurrent = targets[currentTargetIdx % targets.length] || targets[0];
-    const tNext = targets[(currentTargetIdx + 1) % targets.length] || targets[0];
-    const tThird = targets[(currentTargetIdx + 2) % targets.length] || targets[0];
-
-    const buildStudentSpeechUpgrade = (rawStudentText) => {
-      if (!rawStudentText || rawStudentText === '__START_SESSION__') return { upgrade: '', tip: '' };
-      const cleaned = rawStudentText.trim();
-      const words = cleaned.split(/\s+/);
-      if (words.length <= 2) {
-        const cap = cleaned.charAt(0).toUpperCase() + cleaned.slice(1).replace(/[.?!]+$/, '');
-        if (isFrench) {
-          return {
-            upgrade: isZeroLevel ? `Oui, c'est ${cleaned.toLowerCase()}.` : `Je dirais "${cap}" dans cette situation.`,
-            tip: `💡 نطقك لكلمة (${cleaned}) بالفرنسية واضح! لتحويلها إلى جملة كاملة، ابدأ بـ (Oui, c'est...).`
-          };
-        }
-        return {
-          upgrade: isZeroLevel ? `Yes, it is ${cleaned.toLowerCase()}.` : `I would say "${cap}" in this situation.`,
-          tip: `💡 نطقك لكلمة (${cleaned}) واضح! لتحويلها إلى جملة كاملة كالمتحدث الأصلي، ابدأ بـ (Yes, it is...).`
-        };
-      }
-      const formatted = cleaned.charAt(0).toUpperCase() + cleaned.slice(1) + (/[.?!]$/.test(cleaned) ? '' : '.');
-      return {
-        upgrade: formatted,
-        tip: `✅ تركيب جملتك باللغة ${activeLangConfig.nameAr} ممتاز وطبيعي! استمر بهذا التدفق الصوتي الرائع.`
+    const extractFallbackWordsFromLesson = () => {
+      const content = activeLesson?.content || '';
+      const langRegexMap = {
+        ko: /[\uac00-\ud7af\u1100-\u11ff]+/u,
+        ja: /[\u3040-\u30ff\u4e00-\u9faf]+/u,
+        zh: /[\u4e00-\u9faf]+/u,
+        de: /[A-Za-zÄÖÜäöüß]+/u,
+        fr: /[A-Za-zÀ-ÿœæ]+/u,
+        es: /[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+/u,
+        en: /[A-Za-z]+/u
       };
+      const scriptMatcher = langRegexMap[langPrefix] || /[A-Za-z\u00C0-\u024F]+/u;
+
+      const backtickMatches = [...content.matchAll(/`([^\u0600-\u06FF`\n]{2,45})`/g)]
+        .map(m => cleanSpeakableTargetPhrase(m[1].replace(/[`*]/g, '')))
+        .filter(
+          w =>
+            w.length >= 2 &&
+            !w.includes('[') &&
+            !w.includes('=') &&
+            !w.includes('->') &&
+            !/[\u0600-\u06FF]/.test(w) &&
+            scriptMatcher.test(w)
+        );
+      return [...new Set(backtickMatches)].slice(0, 6);
     };
 
-    const studentEval = buildStudentSpeechUpgrade(spokenText);
+    const nativeEmergencyDefaults = {
+      de: isZeroLevel ? ['das Haus', 'der Baum', 'die Eule'] : ['meiner Meinung nach', 'eine Entscheidung treffen', 'im Alltag'],
+      fr: isZeroLevel ? ['un chat', 'un livre', 'une table'] : ['à mon avis', 'prendre une décision', 'au quotidien'],
+      es: isZeroLevel ? ['la casa', 'el libro', 'la mesa'] : ['en mi opinión', 'tomar una decisión', 'en la vida diaria'],
+      ja: isZeroLevel ? ['これ', 'ほん', 'みず'] : ['私の意見では', '大切な 경험', '日常生活で'],
+      zh: isZeroLevel ? ['你好', '喝水', '一本书'] : ['在我看来', '做决定', '日常生活中'],
+      ko: isZeroLevel ? ['집', '책', '물'] : ['제 생각에는', '결정을 내리다', '일상생활에서'],
+      en: isZeroLevel ? ['a book', 'a house', 'a tree'] : ['in my opinion', 'make a decision', 'in everyday life']
+    };
 
-    if (isFrench) {
-      if (spokenText === '__START_SESSION__') {
-        return {
-          studentSpeechUpgrade: '',
-          studentSpeechFeedbackArabic: '',
-          pronunciationScore: null,
-          sceneMeta: {
-            setting: '☕ في مقهى بباريس (Dans un café à Paris)',
-            aiRole: 'الصديق لوكاس (Ton ami Lucas)',
-            studentGoal: `تحدث بالفرنسية واستخدم مفردات الدرس مثل (${targets.slice(0, 3).join(' / ')})`
-          },
-          coachReactionEnglish: `Bonjour mon ami ! Bienvenue dans notre cours de français.`,
-          coachReactionArabic: `مرحباً يا صديقي! أهلاً بك في حصتنا للغة الفرنسية.`,
-          nextQuestionEnglish: isZeroLevel
-            ? `Regarde bien : est-ce que c'est "${tCurrent}" ou "${tNext}" ?`
-            : `Dis-moi, comment peux-tu utiliser "${tCurrent}" dans une phrase en français ?`,
-          nextQuestionArabic: isZeroLevel
-            ? `انظر جيداً: هل هذا (${tCurrent}) أم (${tNext})؟`
-            : `أخبرني، كيف يمكنك استخدام (${tCurrent}) في جملة بالفرنسية؟`,
-          connectedSpeechHint: `C'est un -> /sɛ.tœ̃/ (الربط الصوتي الفرنسي La Liaison)`,
-          modelAnswerForNextQuestion: isZeroLevel ? `Oui, c'est ${tCurrent}.` : `Je pense que ${tCurrent} est très important.`,
-          suggestedReplies: isZeroLevel
-            ? [`Oui, c'est ${tCurrent}.`, `Voici ${tNext}.`, `C'est ${tCurrent} !`]
-            : [`Je pense que ${tCurrent}.`, `J'utilise souvent ${tNext}.`, `Oui, bien sûr !`]
-        };
-      }
+    const dynamicContentWords = extractFallbackWordsFromLesson();
+    const cleanedLessonVocab = (lessonTargetVocabulary || []).map(cleanSpeakableTargetPhrase).filter(Boolean);
+    const targets =
+      cleanedLessonVocab.length > 0
+        ? cleanedLessonVocab
+        : dynamicContentWords.length > 0
+          ? dynamicContentWords
+          : nativeEmergencyDefaults[langPrefix] || nativeEmergencyDefaults.en;
 
-      return {
-        studentSpeechUpgrade: studentEval.upgrade,
-        studentSpeechFeedbackArabic: studentEval.tip,
-        pronunciationScore: 95,
-        coachReactionEnglish: `Très bien ! Ta prononciation française s'améliore beaucoup.`,
-        coachReactionArabic: `ممتاز جداً! نطقك للفرنسية يتحسن كثيراً.`,
-        nextQuestionEnglish: isZeroLevel
-          ? `Maintenant, peux-tu dire une phrase simple avec "${tNext}" ?`
-          : `Et si on utilise "${tNext}", que dirais-tu ?`,
-        nextQuestionArabic: isZeroLevel
-          ? `الآن، هل يمكنك قول جملة بسيطة تحتوي على (${tNext})؟`
-          : `وماذا لو استخدمنا (${tNext})، ماذا ستقول؟`,
-        connectedSpeechHint: `Est-ce que -> /ɛs.kə/`,
-        modelAnswerForNextQuestion: isZeroLevel ? `C'est ${tNext}.` : `J'aime beaucoup ${tNext}.`,
-        suggestedReplies: isZeroLevel
-          ? [`C'est ${tNext}.`, `Voilà ${tNext} !`, `Oui, c'est ${tThird}.`]
-          : [`J'aime bien ${tNext}.`, `Voici un exemple avec ${tNext}.`, `D'accord !`]
-      };
-    }
-
-    if (mode === 'roleplay') {
-      const sceneInfo = isZeroLevel
-        ? {
-            setting: '🏡 في الحديقة المشمسة (In the Sunny Garden)',
-            aiRole: 'الصديق سام (Your Friend Sam)',
-            studentGoal: `رحّب بصديقك سام، وأخبره ماذا ترى حولك في الحديقة مستخدماً عبارات مثل (${targets.slice(0, 3).join(' / ')})`
-          }
-        : {
-            setting: '☕ في مقهى بلندن (At a London Café)',
-            aiRole: 'أليكس - زميلك في العمل (Your Colleague Alex)',
-            studentGoal: `حاور أليكس بشكل طبيعي حول يومك وقراراتك مستخدماً تعبيرات الدرس (${targets.slice(0, 3).join(' / ')})`
-          };
-
-      if (spokenText === '__START_SESSION__') {
-        return {
-          studentSpeechUpgrade: '',
-          studentSpeechFeedbackArabic: '',
-          pronunciationScore: null,
-          sceneMeta: sceneInfo,
-          coachReactionEnglish: isZeroLevel ? `Hi my friend! It is a sunny day in the garden.` : `Hey! I'm so glad you made it to the café today.`,
-          coachReactionArabic: isZeroLevel ? `مرحباً يا صديقي! إنه يوم مشمس في الحديقة.` : `أهلاً! سعيد جداً بوصولك إلى المقهى اليوم.`,
-          nextQuestionEnglish: isZeroLevel ? `Look by the tree! Do you see ${tCurrent} or ${tNext}?` : `Before we order our coffee, tell me—how is your week going so far?`,
-          nextQuestionArabic: isZeroLevel ? `انظر بجانب الشجرة! هل ترى (${tCurrent}) أم (${tNext})؟` : `قبل أن نطلب قهوتنا، أخبرني—كيف يسير أسبوعك حتى الآن؟`,
-          connectedSpeechHint: isZeroLevel ? `Do you see -> D'you-see` : `going so far -> goin-so-far`,
-          modelAnswerForNextQuestion: isZeroLevel ? `I see ${tCurrent}!` : `It's going well! I just needed to ${tCurrent}.`,
-          suggestedReplies: isZeroLevel
-            ? [`I see ${tCurrent}!`, `Look, it is ${tNext}.`, `Yes, ${tCurrent}!`]
-            : [`It's going well! I just needed to ${tCurrent}.`, `Honestly, it's been busy, especially with ${tNext}.`, `Pretty good! What are you ordering today?`]
-        };
-      }
-
-      const roleplayTurns = isZeroLevel
-        ? [
-            {
-              reactEn: `Oh, cool! I see it too!`,
-              reactAr: `أوه، رائع! أنا أراه أيضاً!`,
-              qEn: `Now look at the table near us. Is that ${tNext} on the table?`,
-              qAr: `الآن انظر إلى الطاولة القريبة منا. هل هذا (${tNext}) على الطاولة؟`,
-              modelAns: `Yes, that is ${tNext} on the table.`,
-              linked: `Is that a -> Iz-tha-tə`
-            },
-            {
-              reactEn: `Haha, you have sharp eyes!`,
-              reactAr: `هاها، لديك عينان ثاقبتان!`,
-              qEn: `I brought a little bag with me. Do you want ${tThird} from my bag?`,
-              qAr: `لقد أحضرت حقيبة صغيرة معي. هل تريد (${tThird}) من حقيبتي؟`,
-              modelAns: `Yes, please! I want ${tThird}.`,
-              linked: `Do you want -> D'you-want`
-            }
-          ]
-        : [
-            {
-              reactEn: `Oh really? I totally understand how that feels!`,
-              reactAr: `أوه حقاً؟ أفهم تماماً هذا الشعور!`,
-              qEn: `By the way, the waiter is coming over. After we get our drinks, how do you plan to handle "${tNext}" this week?`,
-              qAr: `بالمناسبة، النادل قادم نحونا. بعد أن نأخذ مشروباتنا، كيف تخطط للتعامل مع موضوع (${tNext}) هذا الأسبوع؟`,
-              modelAns: `I think the best way is to ${tNext} early.`,
-              linked: `coming over -> comin-over`
-            },
-            {
-              reactEn: `That sounds like a really smart plan!`,
-              reactAr: `هذه تبدو خطة ذكية حقاً!`,
-              qEn: `If a friend asked for your advice about "${tThird}", what would you tell them?`,
-              qAr: `لو طلب منك صديق نصيحتك بخصوص (${tThird})، ماذا ستقول له؟`,
-              modelAns: `I would tell them to ${tThird} carefully.`,
-              linked: `asked for -> askt-fər`
-            }
-          ];
-
-      const pickedTurn = roleplayTurns[turnIdx % roleplayTurns.length];
-      return {
-        studentSpeechUpgrade: studentEval.upgrade,
-        studentSpeechFeedbackArabic: studentEval.tip,
-        pronunciationScore: 95,
-        sceneMeta: sceneInfo,
-        coachReactionEnglish: pickedTurn.reactEn,
-        coachReactionArabic: pickedTurn.reactAr,
-        nextQuestionEnglish: pickedTurn.qEn,
-        nextQuestionArabic: pickedTurn.qAr,
-        connectedSpeechHint: pickedTurn.linked,
-        modelAnswerForNextQuestion: pickedTurn.modelAns,
-        suggestedReplies: [
-          pickedTurn.modelAns,
-          isZeroLevel ? `No, it is ${tCurrent}.` : `Actually, I prefer to focus on ${tCurrent}.`,
-          isZeroLevel ? `Yes, it is!` : `That's a great question, let me think!`
-        ]
-      };
-    }
-
-    if (mode === 'mission') {
-      if (spokenText === '__START_SESSION__') {
-        return {
-          studentSpeechUpgrade: '',
-          studentSpeechFeedbackArabic: '',
-          pronunciationScore: null,
-          coachReactionEnglish: `Welcome to the Vocabulary Strike Challenge!`,
-          coachReactionArabic: `مرحباً بك في تحدي قنص وتوظيف مفردات الدرس!`,
-          nextQuestionEnglish: isZeroLevel
-            ? `Target #1: Use "${tCurrent}" in a short sentence! What is in front of you?`
-            : `Target #1: Can you answer me using the expression "${tCurrent}" in your own sentence?`,
-          nextQuestionArabic: isZeroLevel
-            ? `الهدف الأول 🎯: استخدم كلمة "${tCurrent}" في جملة قصيرة! ماذا يوجد أمامك؟`
-            : `الهدف الأول 🎯: هل يمكنك الإجابة مستخدماً العبارة "${tCurrent}" في جملة من إنشائك؟`,
-          connectedSpeechHint: `Target phrase: "${tCurrent}"`,
-          modelAnswerForNextQuestion: isZeroLevel ? `This is ${tCurrent}.` : `In my daily life, I always try to ${tCurrent}.`,
-          suggestedReplies: isZeroLevel
-            ? [`This is ${tCurrent}.`, `I see ${tCurrent}.`, `It is ${tCurrent}!`]
-            : [`In my daily life, I always ${tCurrent}.`, `I think "${tCurrent}" is very useful.`, `Yesterday, I had to ${tCurrent}.`]
-        };
-      }
-
-      return {
-        studentSpeechUpgrade: studentEval.upgrade,
-        studentSpeechFeedbackArabic: studentEval.tip,
-        pronunciationScore: 96,
-        coachReactionEnglish: `Bullseye! You unlocked the target!`,
-        coachReactionArabic: `إصابة دقيقة في الصميم! لقد نجحت في توظيف العبارة!`,
-        nextQuestionEnglish: isZeroLevel
-          ? `Next Target 🎯: Now use "${tNext}" to answer: What do you see on the mat?`
-          : `Next Target 🎯: How would you use "${tNext}" to describe a situation at work or home?`,
-        nextQuestionArabic: isZeroLevel
-          ? `الهدف التالي 🎯: الآن استخدم "${tNext}" للإجابة: ماذا ترى على السجادة؟`
-          : `الهدف التالي 🎯: كيف يمكنك استخدام "${tNext}" لوصف موقف في العمل أو المنزل؟`,
-        connectedSpeechHint: `Focus on linking: "${tNext}"`,
-        modelAnswerForNextQuestion: isZeroLevel ? `I see ${tNext} on the mat.` : `When I'm at home, I often ${tNext}.`,
-        suggestedReplies: isZeroLevel
-          ? [`I see ${tNext} on the mat.`, `It is ${tNext}.`, `Look at ${tNext}!`]
-          : [`When I'm at home, I often ${tNext}.`, `My friend told me about ${tNext}.`, `It is important to ${tNext}.`]
-      };
-    }
-
+    const tCurrent = targets[currentTargetIdx % Math.max(1, targets.length)] || targets[0] || '';
+    const tNext = targets[(currentTargetIdx + 1) % Math.max(1, targets.length)] || targets[0] || '';
+    const tThird = targets[(currentTargetIdx + 2) % Math.max(1, targets.length)] || targets[0] || '';
     const stepNum = (turnIdx % 5) + 1;
-    if (spokenText === '__START_SESSION__') {
-      return {
-        studentSpeechUpgrade: '',
-        studentSpeechFeedbackArabic: '',
-        pronunciationScore: null,
-        coachReactionEnglish: isZeroLevel
-          ? `Welcome to Step 1 of our Speak Class! Today we link sounds smoothly like native speakers.`
-          : `Welcome to Step 1 of our Speak Class on "${activeLesson?.title}"!`,
-        coachReactionArabic: isZeroLevel
-          ? `مرحباً بك في الخطوة (1 من 5) من حصة المحادثة! اليوم سنتدرب على وصل الكلمات بنعومة.`
-          : `مرحباً بك في الخطوة (1 من 5) من حصة المحادثة حول (${activeLesson?.title})!`,
-        nextQuestionEnglish: isZeroLevel
-          ? `Let's start super easy: Do you see "${tCurrent}" or "${tNext}" near you right now?`
-          : `To kick things off in Step 1: When was the last time you had to use or think about "${tCurrent}"?`,
-        nextQuestionArabic: isZeroLevel
-          ? `لنبدأ بسؤال سهل جداً: هل ترى (${tCurrent}) أم (${tNext}) بالقرب منك الآن؟`
-          : `لننطلق في الخطوة الأولى: متى كانت آخر مرة استخدمت أو فكرت فيها في (${tCurrent})؟`,
-        connectedSpeechHint: isZeroLevel ? `Do you see -> D'you-see (تُنطق متصلة ككلمة واحدة)` : `had to use -> had-tə-use`,
-        modelAnswerForNextQuestion: isZeroLevel ? `I see ${tCurrent} near me.` : `Just yesterday, I had to ${tCurrent}.`,
-        suggestedReplies: isZeroLevel
-          ? [`I see ${tCurrent} near me.`, `I see ${tNext}!`, `It is ${tCurrent}.`]
-          : [`Just yesterday, I had to ${tCurrent}.`, `I use ${tCurrent} almost every day.`, `Let me share a quick example about ${tCurrent}.`]
-      };
-    }
+
+    // قواميس المشاهد والسيناريوهات والترقيات الأصلية للغات السبع حسب المستوى (Zero Language Bleed)
+    const MULTILINGUAL_COACH_BANK = {
+      de: {
+        sceneMeta: isZeroLevel
+          ? {
+              setting: '☕ مقهى هادئ في برلين (In einem Berliner Café)',
+              aiRole: 'لوكاس — صديقك الألماني (Dein Freund Lukas)',
+              studentGoal: `تحدث بالألمانية بوضوح واستخدم مفردات الدرس مثل (${targets.slice(0, 3).join(' / ')})`
+            }
+          : isAdvancedLevel
+            ? {
+                setting: '🏛️ ندوة أكاديمية في جامعة ميونخ (Akademisches Seminar in München)',
+                aiRole: 'البروفيسور ويبر (Prof. Dr. Weber)',
+                studentGoal: `ناقش وعلل رأيك بالألمانية الفصحى مستخدماً تراكيب الدرس (${targets.slice(0, 3).join(' / ')})`
+              }
+            : {
+                setting: '🏢 موقف حياتي في العمل والمدينة (Alltag & Beruf in Deutschland)',
+                aiRole: 'هير مولر — زميلك في العمل (Dein Kollege Herr Müller)',
+                studentGoal: `كوّن جملاً ألمانية تامة بتطبيق قاعدة V2 ومفردات الدرس (${targets.slice(0, 3).join(' / ')})`
+              },
+        upgradeShort: (w) => (isZeroLevel ? `Das ist ${w}.` : `Ich verwende "${w}" im Satz.`),
+        startReaction: isZeroLevel
+          ? 'Guten Tag! Willkommen in unserem deutschen Sprechstudio.'
+          : 'Herzlich willkommen! Lass uns heute aktiv auf Deutsch sprechen.',
+        startReactionAr: 'نهارك سعيد! أهلاً بك في استوديو المحادثة الألمانية.',
+        askQuestion: (w) =>
+          isZeroLevel
+            ? `Schritt ${stepNum}: Wie spricht man "${w}" aus? Kannst du sagen: "Das ist ${w}"?`
+            : isAdvancedLevel
+              ? `Schritt ${stepNum}: Wie würden Sie den Begriff "${w}" in einem komplexen Argument verwenden?`
+              : `Schritt ${stepNum}: Kannst du einen vollständigen deutschen Satz mit "${w}" bilden?`,
+        askQuestionAr: (w) =>
+          isZeroLevel
+            ? `الخطوة ${stepNum}: كيف تنطق (${w})؟ هل يمكنك قول: "Das ist ${w}"؟`
+            : `الخطوة ${stepNum}: هل يمكنك تكوين جملة ألمانية كاملة تستخدم فيها (${w})؟`,
+        modelAnswer: (w) => (isZeroLevel ? `Das ist ${w}.` : `Ich denke, dass ${w} sehr wichtig ist.`),
+        replies: (w1, w2, w3) =>
+          isZeroLevel
+            ? [`Das ist ${w1}.`, `Hier ist ${w2}.`, `Ich sehe ${w3}.`]
+            : [`Das ist ${w1}.`, `Ich benutze ${w2} oft.`, `Meiner Meinung nach ist ${w3} wichtig.`],
+        connectedHint: 'Das ist ‿ ein -> /das ɪst aɪ̯n/'
+      },
+      fr: {
+        sceneMeta: {
+          setting: '☕ في مقهى بباريس (Dans un café à Paris)',
+          aiRole: 'الصديق لوكاس (Ton ami Lucas)',
+          studentGoal: `تحدث بالفرنسية واستخدم مفردات الدرس مثل (${targets.slice(0, 3).join(' / ')})`
+        },
+        upgradeShort: (w) => (isZeroLevel ? `Oui, c'est ${w}.` : `J'utilise "${w}" dans une phrase complète.`),
+        startReaction: 'Bonjour ! Bienvenue dans notre atelier de conversation en français.',
+        startReactionAr: 'مرحباً! أهلاً بك في ورشة المحادثة باللغة الفرنسية.',
+        askQuestion: (w) =>
+          isZeroLevel
+            ? `Étape ${stepNum} : Peux-tu prononcer "${w}" ou dire "C'est ${w}" ?`
+            : `Étape ${stepNum} : Comment peux-tu utiliser "${w}" dans une phrase en français ?`,
+        askQuestionAr: (w) => `الخطوة ${stepNum}: كيف يمكنك نطق أو استخدام (${w}) في جملة فرنسية؟`,
+        modelAnswer: (w) => (isZeroLevel ? `Oui, c'est ${w}.` : `Je pense que ${w} est très utile.`),
+        replies: (w1, w2, w3) =>
+          isZeroLevel
+            ? [`Oui, c'est ${w1}.`, `Voici ${w2}.`, `C'est ${w3}.`]
+            : [`Oui, c'est ${w1}.`, `J'utilise ${w2} souvent.`, `À mon avis, ${w3} est essentiel.`],
+        connectedHint: "C'est ‿ un -> /sɛ.tœ̃/ (La Liaison)"
+      },
+      es: {
+        sceneMeta: {
+          setting: '☀️ في ساحة مدريد (En una plaza de Madrid)',
+          aiRole: 'كارلوس — صديقك الإسباني (Tu amigo Carlos)',
+          studentGoal: `تحدث بالإسبانية واستخدم مفردات الدرس مثل (${targets.slice(0, 3).join(' / ')})`
+        },
+        upgradeShort: (w) => (isZeroLevel ? `Sí, es ${w}.` : `Uso "${w}" en una oración completa.`),
+        startReaction: '¡Hola! Bienvenido a nuestra clase de conversación en español.',
+        startReactionAr: 'أهلاً بك في حصة المحادثة باللغة الإسبانية!',
+        askQuestion: (w) =>
+          isZeroLevel
+            ? `Paso ${stepNum}: ¿Puedes pronunciar "${w}" o decir "Esto es ${w}"?`
+            : `Paso ${stepNum}: ¿Cómo puedes usar "${w}" en una frase en español?`,
+        askQuestionAr: (w) => `الخطوة ${stepNum}: هل يمكنك نطق أو استخدام (${w}) في جملة إسبانية؟`,
+        modelAnswer: (w) => (isZeroLevel ? `Esto es ${w}.` : `Creo que ${w} es muy importante.`),
+        replies: (w1, w2, w3) => [`Esto es ${w1}.`, `Aquí está ${w2}.`, `Veo ${w3}.`],
+        connectedHint: 'Esto ‿ es -> /ˈes.to.es/'
+      },
+      ja: {
+        sceneMeta: {
+          setting: '🗾 في مقهى بطوكيو (東京のカフェで)',
+          aiRole: 'كينجي — شريك المحادثة الياباني (健二さん)',
+          studentGoal: `تحدث باليابانية مستخدماً مفردات الدرس (${targets.slice(0, 3).join(' / ')})`
+        },
+        upgradeShort: (w) => `${w} です。`,
+        startReaction: 'こんにちは！日本語の会話練習を始めましょう。',
+        startReactionAr: 'مرحباً! لنبدأ تدريب المحادثة باللغة اليابانية.',
+        askQuestion: (w) => `ステップ ${stepNum}：「${w}」を使って言ってみましょう！`,
+        askQuestionAr: (w) => `الخطوة ${stepNum}: لنحاول نطق واستخدام (${w}) باليابانية!`,
+        modelAnswer: (w) => `これは ${w} です。`,
+        replies: (w1, w2, w3) => [`これは ${w1} です。`, `${w2} があります。`, `${w3} を使います。`],
+        connectedHint: 'Pitch Accent & Particle は (wa)'
+      },
+      zh: {
+        sceneMeta: {
+          setting: '🏮 في استوديو المحادثة ببكين (在北京的茶馆里)',
+          aiRole: 'الأستاذ لي (李老师)',
+          studentGoal: `تحدث بالصينية بنغمات واضحة مستخدماً (${targets.slice(0, 3).join(' / ')})`
+        },
+        upgradeShort: (w) => `这是${w}。`,
+        startReaction: '你好！欢迎来到中文口语练习室。',
+        startReactionAr: 'مرحباً! أهلاً بك في غرفة تدريب المحادثة الصينية.',
+        askQuestion: (w) => `第 ${stepNum} 步：请用「${w}」说一句话：`,
+        askQuestionAr: (w) => `الخطوة ${stepNum}: انطق أو استخدم (${w}) في جملة صينية:`,
+        modelAnswer: (w) => `这是 ${w}。`,
+        replies: (w1, w2, w3) => [`这是 ${w1}。`, `我有 ${w2}。`, `我喜欢 ${w3}。`],
+        connectedHint: 'Tone Sandhi (3rd + 3rd -> 2nd + 3rd)'
+      },
+      ko: {
+        sceneMeta: {
+          setting: '🏙️ في مقهى بسيول (서울의 카페에서)',
+          aiRole: 'مين-هو — صديقك الكوري (민호 씨)',
+          studentGoal: `تحدث بالكورية المهذبة مستخدماً (${targets.slice(0, 3).join(' / ')})`
+        },
+        upgradeShort: (w) => `이것은 ${w}예요.`,
+        startReaction: '안녕하세요! 한국어 말하기 연습을 시작해 볼까요?',
+        startReactionAr: 'مرحباً! لنبدأ تدريب التحدث باللغة الكورية.',
+        askQuestion: (w) => `단계 ${stepNum}: "${w}" 표현을 소리 내어 말해 보세요:`,
+        askQuestionAr: (w) => `الخطوة ${stepNum}: انطق واستخدم العبارة الكورية (${w}):`,
+        modelAnswer: (w) => `이것은 ${w}예요.`,
+        replies: (w1, w2, w3) => [`이것은 ${w1}예요.`, `여기에 ${w2}이/가 있어요.`, `${w3}을/를 공부해요.`],
+        connectedHint: 'Batchim Liaison (연음화)'
+      },
+      en: {
+        sceneMeta: {
+          setting: isZeroLevel ? '🏡 In the Practice Studio' : '☕ At a London Café',
+          aiRole: 'Coach Alex',
+          studentGoal: `Speak clearly in English using lesson vocabulary (${targets.slice(0, 3).join(' / ')})`
+        },
+        upgradeShort: (w) => (isZeroLevel ? `This is ${w}.` : `I can use "${w}" in a complete sentence.`),
+        startReaction: 'Welcome! Let us practice speaking English step by step.',
+        startReactionAr: 'مرحباً! لنتدرب على التحدث بالإنجليزية خطوة بخطوة.',
+        askQuestion: (w) =>
+          isZeroLevel
+            ? `Step ${stepNum}: Can you say "${w}" or use it in "This is ${w}"?`
+            : `Step ${stepNum}: How would you use "${w}" in your own English sentence?`,
+        askQuestionAr: (w) => `الخطوة ${stepNum}: كيف تنطق أو توظف (${w}) في جملة إنجليزية؟`,
+        modelAnswer: (w) => (isZeroLevel ? `This is ${w}.` : `In my daily life, I use ${w}.`),
+        replies: (w1, w2, w3) => [`This is ${w1}.`, `I see ${w2}.`, `Here is ${w3}.`],
+        connectedHint: 'This ‿ is -> /ðɪsɪz/'
+      }
+    };
+
+    const bank = MULTILINGUAL_COACH_BANK[langPrefix] || MULTILINGUAL_COACH_BANK.en;
+    const activePhrase = spokenText === '__START_SESSION__' ? tCurrent : tNext;
 
     return {
-      studentSpeechUpgrade: studentEval.upgrade,
-      studentSpeechFeedbackArabic: studentEval.tip,
-      pronunciationScore: 94,
-      coachReactionEnglish: isZeroLevel
-        ? `Great job on Step ${stepNum}! Your rhythm is getting smoother.`
-        : `Awesome insight for Step ${stepNum}! Notice how natural that sounds.`,
-      coachReactionArabic: isZeroLevel
-        ? `عمل رائع في الخطوة ${stepNum}! إيقاع نطقك أصبح أكثر سلاسة.`
-        : `فكرة رائعة في الخطوة ${stepNum}! لاحظ كم يبدو ذلك طبيعياً.`,
-      nextQuestionEnglish: isZeroLevel
-        ? `Step ${Math.min(5, stepNum + 1)}: If we put "${tNext}" in a question, can you ask me "Is this ${tNext}?" or tell me where it is?`
-        : `Moving to Step ${Math.min(5, stepNum + 1)}: How would you combine "${tNext}" with your personal goal for this month?`,
-      nextQuestionArabic: isZeroLevel
-        ? `الخطوة ${Math.min(5, stepNum + 1)}: لو وضعنا (${tNext}) في جملة، هل يمكنك أن تسألني "Is this ${tNext}?" أو تخبرني أين هو؟`
-        : `ننتقل للخطوة ${Math.min(5, stepNum + 1)}: كيف يمكنك ربط (${tNext}) بهدفك الشخصي لهذا الشهر؟`,
-      connectedSpeechHint: isZeroLevel ? `Is this a -> Iz-thi-sə (اربط الزاي بالذال والهمزة الخفيفة)` : `combine with -> cəm-bine-with`,
-      modelAnswerForNextQuestion: isZeroLevel ? `Is this ${tNext}? Yes, it is on the mat.` : `This month, my main goal is to ${tNext}.`,
-      suggestedReplies: isZeroLevel
-        ? [`Is this ${tNext}?`, `Yes, ${tNext} is on the mat.`, `This is ${tNext}.`]
-        : [`This month, my main goal is to ${tNext}.`, `I definitely want to ${tNext} better.`, `I can connect ${tNext} with my daily study.`]
+      studentSpeechUpgrade:
+        spokenText && spokenText !== '__START_SESSION__' ? bank.upgradeShort(tCurrent) : '',
+      studentSpeechFeedbackArabic: '',
+      // ✨ FIX: ممنوع إرجاع أي درجة نطق وهمية ثابتة (مثل 94 أو 95 أو 96)
+      pronunciationScore: null,
+      sceneMeta: bank.sceneMeta,
+      coachReactionEnglish: bank.startReaction,
+      coachReactionArabic: bank.startReactionAr,
+      nextQuestionEnglish: bank.askQuestion(activePhrase),
+      nextQuestionArabic: bank.askQuestionAr(activePhrase),
+      connectedSpeechHint: bank.connectedHint,
+      modelAnswerForNextQuestion: bank.modelAnswer(activePhrase),
+      suggestedReplies: bank.replies(activePhrase, tCurrent, tThird)
     };
   };
+
 
   const sendToInAppVoiceCoach = async (spokenText, overrideMode = null) => {
     const activeMode = overrideMode || speakClassMode;
@@ -3559,37 +4263,292 @@ const Classroom = () => {
       const activeTargetWord = lessonTargetVocabulary[nextMissionIdx] || lessonTargetVocabulary[0] || '';
       const currentStepNumber = Math.min(5, localTurnCounter + 1);
 
-      let coachData = null;
-      try {
-        const res = await axios.post('http://localhost:5000/api/academy2/lang-cert/live-voice-coach', {
-          courseTitle: `${course?.parentCertTitle || ''} ${course?.title || ''}`.trim(),
-          targetLanguage: course?.targetLanguage || activeLangConfig.nameAr,
-          courseOrder: course?.courseOrder || (activeCertCourseIdx + 1) || 1,
-          sectionOrder: activeLesson?.sectionOrder || 1,
-          difficulty: course?.difficulty || '',
-          sectionName: activeLesson?.section || '',
-          lessonTitle: activeLesson?.title || '',
-          lessonExcerpt: sanitizeLessonMarkdown(activeLesson?.content || '', true),
-          classMode: activeMode,
-          targetVocab: lessonTargetVocabulary,
-          activeMissionWord: activeTargetWord,
-          stepNumber: currentStepNumber,
-          chatHistory: updatedHistory,
-          studentSpokenText: spokenText
-        }, { timeout: 18000 });
-
-        if (res.data?.success && res.data?.data) {
-          coachData = res.data.data;
+// ✨ FIX: Duolingo Strict Mastery Engine - خوارزمية Levenshtein الحقيقية بدون مجاملات كاذبة مع إعادة المحاولة عند الخطأ
+      const computeLevenshteinSimilarity = (a = '', b = '') => {
+        if (!a || !b) return 0;
+        if (a === b) return 1;
+        const matrix = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+        for (let j = 1; j <= b.length; j++) matrix[0][j] = j;
+        for (let i = 1; i <= a.length; i++) {
+          for (let j = 1; j <= b.length; j++) {
+            const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+            matrix[i][j] = Math.min(
+              matrix[i - 1][j] + 1,
+              matrix[i][j - 1] + 1,
+              matrix[i - 1][j - 1] + cost
+            );
+          }
         }
-      } catch (err) {
-        coachData = generateSmartContextualFallback(spokenText, localTurnCounter, activeMode, nextMissionIdx);
+        const distance = matrix[a.length][b.length];
+        return Math.max(0, 1 - distance / Math.max(a.length, b.length));
+      };
+
+      let didStudentPassTurn = spokenText === '__START_SESSION__';
+
+      const buildDuolingoLocalCoachResponse = () => {
+        const baseFallback = generateSmartContextualFallback(spokenText, localTurnCounter, activeMode, nextMissionIdx);
+
+        const normalizeText = (s = '') =>
+          String(s).replace(/\([^)]*\)/g, '').replace(/[^\p{L}\p{N}\s]/gu, '').replace(/\s+/g, ' ').toLowerCase().trim();
+
+        const lastCoachMsg = voiceChatMessages.filter(m => m.role === 'coach').slice(-1)[0];
+        const expectedSentence =
+          lastCoachMsg?.modelAnswerForQuestion ||
+          activeTargetWord ||
+          audioStudioItems[localTurnCounter % Math.max(1, audioStudioItems.length)]?.sentence ||
+          lessonTargetVocabulary[0] ||
+          '';
+
+
+
+
+let calculatedTranscriptMatch = null;
+        let calculatedGrammarScore = null;
+        let calculatedFluencyScore = null;
+        let calculatedTaskStatus = 'not_started';
+        let smartFeedbackAr = '';
+        let matchTier = 'start'; // 'start' | 'pass' | 'partial' | 'fail'
+
+        const cleanExpectedSentence = cleanSpeakableTargetPhrase(expectedSentence);
+
+        if (spokenText && spokenText !== '__START_SESSION__' && cleanExpectedSentence) {
+          const cleanSpoken = normalizeText(spokenText);
+          const cleanTarget = normalizeText(cleanExpectedSentence);
+
+          const spokenTokens = cleanSpoken.split(' ').filter(Boolean);
+          const targetTokens = cleanTarget.split(' ').filter(Boolean);
+
+          // 1. مؤشر مطابقة النص المحول من الصوت (transcriptMatchScore: 0..100%)
+          const matchedTokens = targetTokens.filter(t =>
+            spokenTokens.some(s => s === t || computeLevenshteinSimilarity(s, t) >= 0.78)
+          );
+          const missingTokens = targetTokens.filter(t => !matchedTokens.includes(t));
+
+          const tokenRatio = targetTokens.length > 0 ? matchedTokens.length / targetTokens.length : 0;
+          const charSimilarity = computeLevenshteinSimilarity(cleanSpoken, cleanTarget);
+          calculatedTranscriptMatch = Math.round(Math.max(charSimilarity, tokenRatio * 0.85 + charSimilarity * 0.15) * 100);
+
+          // 2. مؤشر الدقة النحوية والتركيبية (grammarAccuracyScore: ترتيب الكلمات واكتمال الجملة)
+          const orderMatches = targetTokens.filter((t, idx) => spokenTokens[idx] && computeLevenshteinSimilarity(spokenTokens[idx], t) >= 0.78);
+          const orderRatio = targetTokens.length > 0 ? orderMatches.length / targetTokens.length : 0;
+          calculatedGrammarScore = Math.round((tokenRatio * 0.6 + orderRatio * 0.4) * 100);
+
+          // 3. مؤشر الاستمرارية والإنتاج اللغوي (fluencyScore: طول الإجابة وتدفق الكلمات مقارنة بالمطلوب)
+          const lengthRatio = targetTokens.length > 0 ? Math.min(1, spokenTokens.length / targetTokens.length) : 0;
+          calculatedFluencyScore = Math.round((lengthRatio * 0.5 + tokenRatio * 0.5) * 100);
+
+          // 4. حالة إنجاز المهمة التواصلية (taskCompletionStatus)
+          if (calculatedTranscriptMatch >= 75) {
+            matchTier = 'pass';
+            didStudentPassTurn = true;
+            calculatedTaskStatus = 'completed';
+            smartFeedbackAr = `✅ تطابق نصي ممتاز (${calculatedTranscriptMatch}%)! التقط المتصفح العبارة المطلوبة ("${cleanExpectedSentence}") بوضوح.`;
+          } else if (calculatedTranscriptMatch >= 45) {
+            matchTier = 'partial';
+            didStudentPassTurn = false;
+            calculatedTaskStatus = 'partial';
+            smartFeedbackAr = `⚠️ تطابق جزئي (${calculatedTranscriptMatch}%)! النص المسموع ("${spokenText}") قريب، ولكن لتكتمل العبارة أضف: (${missingTokens.join(' ') || cleanExpectedSentence}). أعد المحاولة!`;
+          } else {
+            matchTier = 'fail';
+            didStudentPassTurn = false;
+            calculatedTaskStatus = 'retry_needed';
+            smartFeedbackAr = `❌ غير مطابق (${calculatedTranscriptMatch}%): المتصفح التقط ("${spokenText}") بينما العبارة المستهدفة باللغة ${activeLangConfig.nameAr} هي ("${cleanExpectedSentence}"). استمع للنموذج بـ 🔊 وأعد المحاولة!`;
+          }
+        }
+
+        // قوالب استجابة ديناميكية صريحة بـ 3 مستويات (إتقان / تقارب / خطأ) لكل لغة من اللغات الـ 7
+        const langPrefix = (activeLangConfig.code || 'en-US').split('-')[0].toLowerCase();
+        const localizedPrompts = {
+          de: {
+            start: 'Hallo! Lass uns mit dem Sprechtraining beginnen.',
+            startAr: 'مرحباً! لنبدأ تدريب التحدث باللغة الألمانية.',
+            pass: 'Sehr gut! Der gesprochene Satz stimmt überein.',
+            passAr: 'ممتاز جداً! الجملة المنطوقة بالألمانية مطابقة للمطلوب.',
+            partial: 'Fast richtig! Hör gut zu und versuch es noch einmal.',
+            partialAr: 'قريب جداً! استمع جيداً وحاول نطق نفس العبارة مرة أخرى.',
+            fail: (s, t) => `Nicht ganz ("${s}"). Bitte sprich diesen Ausdruck: "${t}"`,
+            failAr: (s, t) => `النص الملتقط ("${s}") غير مطابق. أعد المحاولة وانطق بالألمانية: "${t}"`,
+            ask: (w) => `Kannst du jetzt diesen Ausdruck sprechen: "${w}"?`,
+            askAr: (w) => `انطق الآن هذه العبارة بالألمانية: (${w})`,
+            model: (w) => `${w}`
+          },
+          fr: {
+            start: 'Bonjour ! Commençons notre entraînement oral.',
+            startAr: 'مرحباً! لنبدأ تدريبنا الشفهي بالفرنسية.',
+            pass: 'Très bien ! La phrase correspond parfaitement.',
+            passAr: 'أحسنت جداً! النص الفرنسي المنطوق مطابق للمطلوب.',
+            partial: 'Presque ! Écoute bien et essaie encore une fois.',
+            partialAr: 'قريب جداً! استمع للنموذج الصوتي وحاول مرة أخرى.',
+            fail: (s, t) => `Ce n'est pas tout à fait ça ("${s}"). Répète après moi : "${t}"`,
+            failAr: (s, t) => `إجابة غير مطابقة (قلتَ "${s}"). أعد المحاولة وانطق بالفرنسية: "${t}"`,
+            ask: (w) => `Peux-tu prononcer cette expression : "${w}" ?`,
+            askAr: (w) => `انطق هذه العبارة بالفرنسية: (${w})`,
+            model: (w) => `${w}`
+          },
+          es: {
+            start: '¡Hola! Empecemos a practicar en español.',
+            startAr: 'مرحباً! لنبدأ ممارسة التحدث بالإسبانية.',
+            pass: '¡Excelente! La frase coincide muy bien.',
+            passAr: 'ممتاز! لقد نطقت العبارة الإسبانية المطلوبة.',
+            partial: '¡Casi! Escucha otra vez e inténtalo de nuevo.',
+            partialAr: 'قريب جداً! استمع مرة أخرى وأعد المحاولة.',
+            fail: (s, t) => `Eso fue diferente ("${s}"). Intenta decir: "${t}"`,
+            failAr: (s, t) => `كلمة مختلفة (قلتَ "${s}"). حاول نطق العبارة الإسبانية: "${t}"`,
+            ask: (w) => `¿Puedes pronunciar esta expresión: "${w}"?`,
+            askAr: (w) => `انطق هذه العبارة بالإسبانية: (${w})`,
+            model: (w) => `${w}`
+          },
+          ja: {
+            start: 'こんにちは！日本語の練習を始めましょう。',
+            startAr: 'مرحباً! لنبدأ التدريب باليابانية.',
+            pass: '素晴らしい！正しく認識されました。 (Subarashii!)',
+            passAr: 'رائع! تم التعرف على عبارتك اليابانية بدقة.',
+            partial: '惜しい！もう一度聞いて言ってみましょう。',
+            partialAr: 'قريب جداً! استمع مرة أخرى وأعد المحاولة.',
+            fail: (s, t) => `違います ("${s}")。もう一度「${t}」と言ってみてください。`,
+            failAr: (s, t) => `عبارة غير مطابقة (قلتَ "${s}"). أعد المحاولة وانطق باليابانية: "${t}"`,
+            ask: (w) => `「${w}」と言ってみましょう！`,
+            askAr: (w) => `انطق هذه العبارة باليابانية: (${w})`,
+            model: (w) => `${w}`
+          },
+          zh: {
+            start: '你好！我们开始口语练习吧。',
+            startAr: 'مرحباً! لنبدأ تدريب التحدث بالصينية.',
+            pass: '太棒了！句子完全匹配。 (Tài bàng le!)',
+            passAr: 'ممتاز جداً! الجملة الصينية مطابقة.',
+            partial: '差不多了！再听一次并重试。',
+            partialAr: 'قريب جداً! استمع مرة أخرى وأعد المحاولة.',
+            fail: (s, t) => `不对哦 ("${s}")。请跟着读：「${t}」`,
+            failAr: (s, t) => `غير مطابق (قلتَ "${s}"). أعد المحاولة وانطق بالصينية: "${t}"`,
+            ask: (w) => `请大声读出：「${w}」`,
+            askAr: (w) => `انطق هذه العبارة بالصينية: (${w})`,
+            model: (w) => `${w}`
+          },
+          ko: {
+            start: '안녕하세요! 말하기 연습을 시작해 볼까요?',
+            startAr: 'مرحباً! لنبدأ تدريب التحدث بالكورية.',
+            pass: '아주 잘했어요! 문장이 정확히 일치해요.',
+            passAr: 'أحسنت صنعاً! الجملة الكورية مطابقة تماماً.',
+            partial: '거의 맞았어요! 다시 듣고 따라해 보세요.',
+            partialAr: 'قريب جداً! استمع مرة أخرى وأعد المحاولة.',
+            fail: (s, t) => `다른 단어예요 ("${s}"). 다시 "${t}"라고 말해 보세요.`,
+            failAr: (s, t) => `كلمة مختلفة (قلتَ "${s}"). أعد المحاولة وانطق بالكورية: "${t}"`,
+            ask: (w) => `이제 "${w}" 표현을 말해 보세요:`,
+            askAr: (w) => `انطق هذه العبارة بالكورية: (${w})`,
+            model: (w) => `${w}`
+          },
+          en: {
+            start: "Welcome! Let's practice speaking step by step.",
+            startAr: 'مرحباً! لنتدرب على التحدث باللغة الإنجليزية.',
+            pass: 'Spot on! Your spoken phrase matched the target.',
+            passAr: 'أحسنت! عبارتك المنطوقة مطابقة للهدف.',
+            partial: 'Close! Listen carefully and try saying it one more time.',
+            partialAr: 'قريب جداً! استمع جيداً وحاول نطقها مرة أخرى.',
+            fail: (s, t) => `That sounded like "${s}". Let's try saying "${t}" again!`,
+            failAr: (s, t) => `العبارة المسموعة ("${s}") غير مطابقة. لنحاول نطق ("${t}") مرة أخرى!`,
+            ask: (w) => `Can you say this clearly: "${w}"?`,
+            askAr: (w) => `انطق هذه العبارة بالإنجليزية: (${w})`,
+            model: (w) => `${w}`
+          }
+        };
+
+        const nextStepTurnIdx = didStudentPassTurn ? localTurnCounter + 1 : localTurnCounter;
+        const rawNextTarget =
+          !didStudentPassTurn && cleanExpectedSentence
+            ? cleanExpectedSentence
+            : audioStudioItems[nextStepTurnIdx % Math.max(1, audioStudioItems.length)]?.sentence ||
+              effectiveLadderSteps[nextStepTurnIdx % Math.max(1, effectiveLadderSteps.length)]?.englishText ||
+              lessonTargetVocabulary[nextStepTurnIdx % Math.max(1, lessonTargetVocabulary.length)] ||
+              activeTargetWord ||
+              activeLesson?.title ||
+              '';
+        const targetPhraseForNextTurn = cleanSpeakableTargetPhrase(rawNextTarget);
+
+        const lp = localizedPrompts[langPrefix] || localizedPrompts.en;
+        const studioMatch = audioStudioItems.find(
+          item => cleanSpeakableTargetPhrase(item.sentence) === targetPhraseForNextTurn
+        );
+
+        const reactionEn =
+          matchTier === 'start'
+            ? lp.start
+            : matchTier === 'pass'
+              ? lp.pass
+              : matchTier === 'partial'
+                ? lp.partial
+                : lp.fail(spokenText, cleanExpectedSentence);
+
+        const reactionAr =
+          matchTier === 'start'
+            ? lp.startAr
+            : matchTier === 'pass'
+              ? lp.passAr
+              : matchTier === 'partial'
+                ? lp.partialAr
+                : lp.failAr(spokenText, cleanExpectedSentence);
+
+        return {
+          ...baseFallback,
+          studentSpeechUpgrade: cleanExpectedSentence || baseFallback.studentSpeechUpgrade,
+          studentSpeechFeedbackArabic: smartFeedbackAr,
+          // ✨ FIX: فصل المؤشرات الستة بصرامة وصدق
+          ttsEngineStatus: 'ready',
+          transcriptMatchScore: calculatedTranscriptMatch,
+          pronunciationScore: null, // لا يوجد قياس صوتي فيزيائي في المتصفح
+          grammarAccuracyScore: calculatedGrammarScore,
+          fluencyScore: calculatedFluencyScore,
+          taskCompletionStatus: calculatedTaskStatus,
+          coachReactionEnglish: reactionEn,
+          coachReactionArabic: reactionAr,
+          nextQuestionEnglish: lp.ask(targetPhraseForNextTurn),
+          nextQuestionArabic: studioMatch?.meaning
+            ? `${lp.askAr(targetPhraseForNextTurn)} — المعنى: (${studioMatch.meaning})`
+            : lp.askAr(targetPhraseForNextTurn),
+          connectedSpeechHint: studioMatch?.ipa ? `IPA: ${studioMatch.ipa}` : baseFallback.connectedSpeechHint,
+          modelAnswerForNextQuestion: targetPhraseForNextTurn,
+          suggestedReplies: [
+            targetPhraseForNextTurn,
+            cleanSpeakableTargetPhrase(lessonTargetVocabulary[0]) || targetPhraseForNextTurn,
+            cleanSpeakableTargetPhrase(lessonTargetVocabulary[1]) || lp.model(targetPhraseForNextTurn)
+          ].filter(Boolean)
+        };
+      };
+
+      let coachData = null;
+      if (window.__USE_CLOUD_VOICE_COACH__) {
+        try {
+          const res = await axios.post('http://localhost:5000/api/academy2/lang-cert/live-voice-coach', {
+            courseTitle: `${course?.parentCertTitle || ''} ${course?.title || ''}`.trim(),
+            targetLanguage: course?.targetLanguage || activeLangConfig.nameAr,
+            courseOrder: course?.courseOrder || (activeCertCourseIdx + 1) || 1,
+            sectionOrder: activeLesson?.sectionOrder || 1,
+            difficulty: course?.difficulty || '',
+            sectionName: activeLesson?.section || '',
+            lessonTitle: activeLesson?.title || '',
+            lessonExcerpt: sanitizeLessonMarkdown(activeLesson?.content || '', true),
+            classMode: activeMode,
+            targetVocab: lessonTargetVocabulary,
+            activeMissionWord: activeTargetWord,
+            stepNumber: currentStepNumber,
+            chatHistory: updatedHistory,
+            studentSpokenText: spokenText
+          }, { timeout: 8000 });
+
+          if (res.data?.success && res.data?.data) {
+            coachData = res.data.data;
+            const sttScore = coachData.transcriptMatchScore ?? 80;
+            didStudentPassTurn = sttScore >= 70;
+          }
+        } catch (err) {
+          coachData = buildDuolingoLocalCoachResponse();
+        }
+      } else {
+        coachData = buildDuolingoLocalCoachResponse();
       }
 
-      if (!coachData) {
-        coachData = generateSmartContextualFallback(spokenText, localTurnCounter, activeMode, nextMissionIdx);
+      if (didStudentPassTurn) {
+        setLocalTurnCounter(prev => prev + 1);
       }
-
-      setLocalTurnCounter(prev => prev + 1);
 
       const upgradeForStudent = coachData.studentSpeechUpgrade || coachData.nativeUpgrade || '';
       const feedbackForStudent = coachData.studentSpeechFeedbackArabic || coachData.coachTipArabic || '';
@@ -3615,6 +4574,37 @@ const Classroom = () => {
         modelAnswerForQuestion: coachData.modelAnswerForNextQuestion || (coachData.suggestedReplies?.[0] || '')
       };
 
+      // ✨ FIX: Phase 2 Six-Metric Honest Assessment Validation
+      const validTranscriptMatch =
+        typeof coachData?.transcriptMatchScore === 'number' &&
+        Number.isFinite(coachData.transcriptMatchScore) &&
+        coachData.transcriptMatchScore >= 0 &&
+        coachData.transcriptMatchScore <= 100
+          ? Math.round(coachData.transcriptMatchScore)
+          : null;
+
+      const validAcousticPronunciation =
+        typeof coachData?.pronunciationScore === 'number' &&
+        Number.isFinite(coachData.pronunciationScore) &&
+        coachData.pronunciationScore >= 0 &&
+        coachData.pronunciationScore <= 100
+          ? Math.round(coachData.pronunciationScore)
+          : null;
+
+      const validGrammarScore =
+        typeof coachData?.grammarAccuracyScore === 'number' &&
+        Number.isFinite(coachData.grammarAccuracyScore)
+          ? Math.round(coachData.grammarAccuracyScore)
+          : null;
+
+      const validFluencyScore =
+        typeof coachData?.fluencyScore === 'number' &&
+        Number.isFinite(coachData.fluencyScore)
+          ? Math.round(coachData.fluencyScore)
+          : null;
+
+      const validTaskStatus = coachData?.taskCompletionStatus || (validTranscriptMatch >= 75 ? 'completed' : 'retry_needed');
+
       setVoiceChatMessages(prev => {
         const copy = [...prev];
         for (let i = copy.length - 1; i >= 0; i--) {
@@ -3623,7 +4613,12 @@ const Classroom = () => {
               ...copy[i],
               studentUpgrade: upgradeForStudent,
               studentFeedbackAr: feedbackForStudent,
-              score: coachData.pronunciationScore || 94
+              score: validTranscriptMatch,
+              transcriptMatchScore: validTranscriptMatch,
+              pronunciationScore: validAcousticPronunciation,
+              grammarAccuracyScore: validGrammarScore,
+              fluencyScore: validFluencyScore,
+              taskCompletionStatus: validTaskStatus
             };
             break;
           }
@@ -3782,7 +4777,8 @@ useEffect(() => {
     setActiveSlideIdx(0);
     setIsAutoNarratingSlide(false);
 
-    if (activeLesson) {
+if (activeLesson) {
+      updateLessonMasterySignal(activeLesson._id, 'open', true);
       if (activeLesson.section) {
         setOpenSections(prev => ({ ...prev, [activeLesson.section]: true }));
       }
@@ -3907,7 +4903,7 @@ useEffect(() => {
     setSelectedBossAnswers(prev => ({ ...prev, [questionIndex]: optionIndex }));
   };
 
-  const handleCheckDailyQuest = () => {
+const handleCheckDailyQuest = () => {
     if (selectedQuestAnswer === null) {
       alert("اختر إجابة أولاً لتجربة السؤال الإضافي!");
       return;
@@ -3915,8 +4911,10 @@ useEffect(() => {
     setIsQuizSubmitted(true);
     if (selectedQuestAnswer == activeLesson.dailyQuest.correctAnswerIndex) {
       setQuestStatus('success');
+      updateLessonMasterySignal(activeLesson?._id, 'quiz', true);
     } else {
       setQuestStatus('error');
+      updateLessonMasterySignal(activeLesson?._id, 'quiz_failed', false);
     }
   };
 
@@ -3938,10 +4936,13 @@ useEffect(() => {
     setScoreInfo({ score: correctCount, percentage });
     setIsQuizSubmitted(true);
 
-    if (percentage >= 70) {
+    if (percentage >= 75) {
       setQuestStatus('success');
+      updateLessonMasterySignal(activeLesson?._id, 'quiz', true);
+      updateLessonMasterySignal(activeLesson?._id, 'practice', true);
     } else {
       setQuestStatus('error');
+      updateLessonMasterySignal(activeLesson?._id, 'quiz_failed', false);
     }
   };
 
@@ -3976,8 +4977,11 @@ useEffect(() => {
         isLanguageTask: isLanguageLesson
       });
 
-      if (res.data.success) {
+     if (res.data.success) {
         setCodeFeedback(res.data.data);
+        if (res.data.data?.isCorrect) {
+          updateLessonMasterySignal(activeLesson?._id, 'writing', true);
+        }
       }
     } catch (err) {
       const normalize = (str) => (str || '')
@@ -4751,6 +5755,17 @@ useEffect(() => {
                           )}
                           {!studentPreviewMode && (
                             <>
+{/* ✨ FIX: 1-Click Automated QA Linter Button */}
+                              <button
+                                type="button"
+                                disabled={isOperatingLesson}
+                                onClick={handleRunAutomatedCourseLinter}
+                                className="bg-teal-500/20 hover:bg-teal-500 text-teal-300 hover:text-slate-950 text-xs font-black px-3 py-2 rounded-xl border border-teal-500/40 transition-all flex items-center gap-1.5 shadow-[0_0_12px_rgba(20,184,166,0.2)] disabled:opacity-50"
+                                title="فحص آلي شامل لبنية JSON، إصلاح التمارين، منع تسرب اللغات، وحذف الدروس المكررة"
+                              >
+                                <ShieldAlert size={14} /> 🛡️ فحص وإصلاح المنهج (QA Linter)
+                              </button>
+
                               <button
                                 type="button"
                                 onClick={handleExportUpdatedJSON}
@@ -5335,69 +6350,283 @@ useEffect(() => {
                         ))}
                       </div>
 
-                      {/* 6. محفظة مفردات التلميذ المحفوظة */}
-                      <button
-                        type="button"
-                        onClick={() => setShowVocabDrawer(!showVocabDrawer)}
-                        className="bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/30 px-3 py-1.5 rounded-xl text-[11px] font-black flex items-center gap-1.5 transition-all"
-                      >
-                        <span>⭐ مفرداتي ({savedStudentWords.length})</span>
-                      </button>
+{/* 6. شارة حالة إتقان الدرس الحالية (6-State Mastery Badge) */}
+                      {(() => {
+                        const mState = getEffectiveLessonMasteryState(activeLesson?._id);
+                        return (
+                          <span
+                            className={`px-3 py-1.5 rounded-xl text-[11px] font-black border flex items-center gap-1.5 ${mState.badgeClass}`}
+                            title="حالة الإتقان الفعلية لهذا الدرس بناءً على التمارين والإنتاج اللغوي والمراجعة المتباعدة"
+                          >
+                            <span className={`w-2 h-2 rounded-full ${mState.dotClass}`} />
+                            <span>الإتقان: {mState.labelAr}</span>
+                          </span>
+                        );
+                      })()}
+
+                      {/* 7. محفظة مفردات التلميذ ونظام التكرار المتباعد (SRS) */}
+                      {(() => {
+                        const dueCount = savedStudentWords.filter(w => !w.nextReviewAt || w.nextReviewAt <= Date.now()).length;
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => setShowVocabDrawer(!showVocabDrawer)}
+                            className="bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/30 px-3 py-1.5 rounded-xl text-[11px] font-black flex items-center gap-1.5 transition-all"
+                          >
+                            <span>⭐ مفرداتي ({savedStudentWords.length})</span>
+                            {dueCount > 0 && (
+                              <span className="bg-rose-500 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full animate-pulse">
+                                {dueCount} للمراجعة
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })()}
                     </div>
                   </div>
 
-                  {/* ⭐ درج محفظة مفردات التلميذ المحفوظة للمراجعة السريعة */}
+                  {/* ⭐🧠 درج محفظة المفردات وجلسة التكرار المتباعد والاسترجاع النشط (SRS Active Recall) */}
                   {showVocabDrawer && (
-                    <div className="mb-6 bg-slate-950 border-2 border-amber-500/40 rounded-2xl p-4 space-y-3 animate-fade-in shadow-2xl">
-                      <div className="flex items-center justify-between">
-                        <h4 className="text-xs font-black text-amber-400 flex items-center gap-1.5">
-                          ⭐ محفظة مفرداتي المحفوظة للمراجعة الصوتية ({savedStudentWords.length} كلمات):
-                        </h4>
-                        <button
-                          type="button"
-                          onClick={() => setShowVocabDrawer(false)}
-                          className="text-xs text-slate-400 hover:text-white"
-                        >
-                          إغلاق ✕
-                        </button>
+                    <div className="mb-6 bg-slate-950 border-2 border-amber-500/40 rounded-2xl p-5 space-y-4 animate-fade-in shadow-2xl">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                        <div>
+                          <h4 className="text-xs sm:text-sm font-black text-amber-400 flex items-center gap-2">
+                            ⭐ محفظة التكرار المتباعد والاسترجاع النشط (SRS Vocabulary Vault — {savedStudentWords.length} مفردة)
+                          </h4>
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            تنتقل المفردات عبر 5 صناديق ذاكرة (Leitner Boxes 1➔5) بناءً على استرجاعك النشط لها سمعياً وكتابياً وعكسياً.
+                          </p>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={handleHarvestCurrentLessonVocabToSRS}
+                            className="bg-emerald-500/15 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 border border-emerald-500/30 px-3 py-1.5 rounded-xl text-[11px] font-black transition-all"
+                          >
+                            📥 + أضف مفردات هذا الدرس للمحفظة
+                          </button>
+
+                          {savedStudentWords.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={startSRSActiveRecallSession}
+                              className="bg-gradient-to-l from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white px-3.5 py-1.5 rounded-xl text-[11px] font-black shadow flex items-center gap-1.5 transition-all"
+                            >
+                              <BrainCircuit size={13} /> 🧠 جلسة مراجعة سريعة (Active Recall Quiz)
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowVocabDrawer(false);
+                              setSrsQuizSession(null);
+                            }}
+                            className="text-xs text-slate-400 hover:text-white px-2 py-1"
+                          >
+                            إغلاق ✕
+                          </button>
+                        </div>
                       </div>
+
+                      {/* 🧠 واجهة جلسة الاسترجاع النشط (Active Recall Quiz) */}
+                      {srsQuizSession && (
+                        <div className="bg-indigo-950/35 border-2 border-indigo-500/40 rounded-2xl p-4 space-y-3">
+                          {srsQuizSession.isFinished ? (
+                            <div className="text-center py-4 space-y-3">
+                              <Trophy size={36} className="mx-auto text-amber-400" />
+                              <h5 className="text-base font-black text-white">
+                                🎉 اكتملت جلسة الاسترجاع النشط! نتيجتك: {srsQuizSession.sessionCorrect} / {srsQuizSession.sessionTotal}
+                              </h5>
+                              <p className="text-xs text-slate-300">
+                                تم تحديث صناديق الذاكرة (Boxes 1–5) ومواعيد المراجعة القادمة وحالة إتقان الدرس تلقائياً.
+                              </p>
+                              <div className="flex justify-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={startSRSActiveRecallSession}
+                                  className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black px-4 py-2 rounded-xl"
+                                >
+                                  🔄 جولة مراجعة أخرى
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setSrsQuizSession(null)}
+                                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold px-4 py-2 rounded-xl"
+                                >
+                                  العودة لقائمة المفردات
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="flex items-center justify-between text-xs font-bold text-indigo-300">
+                                <span>
+                                  سؤال الاسترجاع {srsQuizSession.currentIndex + 1} من {srsQuizSession.sessionTotal} • الصندوق الحالي: Box {srsQuizSession.target.boxLevel || 1}/5
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setSrsQuizSession(null)}
+                                  className="text-slate-400 hover:text-white"
+                                >
+                                  إنهاء الجلسة ✕
+                                </button>
+                              </div>
+
+                              {srsQuizSession.mode === 'reverse_mc' && (
+                                <div className="space-y-3">
+                                  <p className="text-sm font-black text-white">
+                                    🔄 استرجاع عكسي: ما هي المفردة باللغة {activeLangConfig.nameAr} التي تعني: <span className="text-amber-300">({srsQuizSession.target.meaning})</span>؟
+                                  </p>
+                                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" dir="ltr">
+                                    {srsQuizSession.options.map((opt, oIdx) => (
+                                      <button
+                                        key={oIdx}
+                                        type="button"
+                                        disabled={Boolean(srsQuizSession.feedback)}
+                                        onClick={() => handleAnswerSRSQuestion(opt.word)}
+                                        className="bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-amber-400 text-white font-bold text-xs p-2.5 rounded-xl transition-all"
+                                      >
+                                        {opt.word}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {srsQuizSession.mode === 'audio_mc' && (
+                                <div className="space-y-3">
+                                  <div className="flex items-center justify-between flex-wrap gap-2">
+                                    <p className="text-sm font-black text-white">
+                                      🎧 تمييز سمعي: استمع للنطق واختر المفردة الصحيحة ومعناها:
+                                    </p>
+                                    <button
+                                      type="button"
+                                      onClick={() => handlePlayAudioText(srsQuizSession.target.word, 0.85, 'srs_replay')}
+                                      className="bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold px-3 py-1.5 rounded-xl flex items-center gap-1"
+                                    >
+                                      <Volume2 size={13} /> أعد سماع الكلمة 🔊
+                                    </button>
+                                  </div>
+                                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" dir="ltr">
+                                    {srsQuizSession.options.map((opt, oIdx) => (
+                                      <button
+                                        key={oIdx}
+                                        type="button"
+                                        disabled={Boolean(srsQuizSession.feedback)}
+                                        onClick={() => handleAnswerSRSQuestion(opt.word)}
+                                        className="bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-purple-400 text-white font-bold text-xs p-2.5 rounded-xl transition-all"
+                                      >
+                                        <span className="block">{opt.word}</span>
+                                        {opt.meaning && <span className="text-[10px] text-slate-400 block mt-0.5" dir="rtl">{opt.meaning}</span>}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {srsQuizSession.mode === 'written_recall' && (
+                                <div className="space-y-3">
+                                  <div className="flex items-center justify-between flex-wrap gap-2">
+                                    <p className="text-sm font-black text-white">
+                                      ✍️ إنتاج كتابي نشط: اكتب المفردة باللغة {activeLangConfig.nameAr}
+                                      {srsQuizSession.target.meaning ? ` التي تعني (${srsQuizSession.target.meaning})` : ' التي تسمعها الآن'}:
+                                    </p>
+                                    <button
+                                      type="button"
+                                      onClick={() => handlePlayAudioText(srsQuizSession.target.word, 0.8, 'srs_dictation')}
+                                      className="bg-purple-500/20 hover:bg-purple-600 text-purple-300 hover:text-white text-xs font-bold px-3 py-1 rounded-xl flex items-center gap-1"
+                                    >
+                                      <Volume2 size={13} /> اسمع التلميح الصوتي 🔊
+                                    </button>
+                                  </div>
+                                  <div className="flex gap-2" dir="ltr">
+                                    <input
+                                      type="text"
+                                      value={srsTypedAnswer}
+                                      disabled={Boolean(srsQuizSession.feedback)}
+                                      onChange={(e) => setSrsTypedAnswer(e.target.value)}
+                                      placeholder={`Type in ${activeLangConfig.nameEn}...`}
+                                      className="flex-1 bg-slate-950 border border-slate-700 focus:border-amber-400 rounded-xl px-3.5 py-2 text-xs text-white outline-none"
+                                    />
+                                    <button
+                                      type="button"
+                                      disabled={Boolean(srsQuizSession.feedback) || !srsTypedAnswer.trim()}
+                                      onClick={() => handleAnswerSRSQuestion(srsTypedAnswer)}
+                                      className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs px-4 py-2 rounded-xl disabled:opacity-40"
+                                    >
+                                      تحقق ✓
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {srsQuizSession.feedback && (
+                                <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800">
+                                  <span className={`text-xs font-bold ${srsQuizSession.feedback.isCorrect ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                    {srsQuizSession.feedback.message}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={handleNextSRSQuestion}
+                                    className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs px-4 py-1.5 rounded-xl shrink-0"
+                                  >
+                                    التالي ←
+                                  </button>
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      )}
+
                       {savedStudentWords.length === 0 ? (
                         <p className="text-xs text-slate-400">
-                          اضغط على زر النجمة (★) بجانب أي كلمة أجنبية في الجداول أو بطاقات الفم لحفظها هنا ومراجعتها صوتياً في أي وقت!
+                          اضغط على زر النجمة (★) بجانب أي كلمة أجنبية في الجداول، أو اضغط على الزر الأخضر <strong className="text-emerald-300">(📥 + أضف مفردات هذا الدرس للمحفظة)</strong> لبدء جدول المراجعة المتباعدة!
                         </p>
                       ) : (
                         <div className="flex flex-wrap gap-2" dir="ltr">
-                          {savedStudentWords.map((item, idx) => (
-                            <div
-                              key={idx}
-                              className="bg-slate-900 border border-slate-700 hover:border-amber-400 rounded-xl px-3 py-2 flex items-center gap-2 text-xs transition-all"
-                            >
-                              <button
-                                type="button"
-                                onClick={() => handlePlayAudioText(item.word, studentDefaultSpeed, `saved_w_${idx}`)}
-                                className="bg-purple-500/20 hover:bg-purple-600 text-purple-300 hover:text-white p-1.5 rounded-lg"
+                          {savedStudentWords.map((item, idx) => {
+                            const isDue = !item.nextReviewAt || item.nextReviewAt <= Date.now();
+                            return (
+                              <div
+                                key={idx}
+                                className={`bg-slate-900 border rounded-xl px-3 py-2 flex items-center gap-2.5 text-xs transition-all ${
+                                  isDue ? 'border-amber-500/50' : 'border-slate-800'
+                                }`}
                               >
-                                <Volume2 size={13} />
-                              </button>
-                              <div>
-                                <strong className="text-white block">{renderXRayForeignWord(item.word, xrayPhonicsMode, activeLangConfig.code)}</strong>
-                                {item.meaning && <span className="text-[10px] text-amber-300 block" dir="rtl">{item.meaning}</span>}
+                                <button
+                                  type="button"
+                                  onClick={() => handlePlayAudioText(item.word, studentDefaultSpeed, `saved_w_${idx}`)}
+                                  className="bg-purple-500/20 hover:bg-purple-600 text-purple-300 hover:text-white p-1.5 rounded-lg"
+                                >
+                                  <Volume2 size={13} />
+                                </button>
+                                <div>
+                                  <div className="flex items-center gap-1.5">
+                                    <strong className="text-white">{renderXRayForeignWord(item.word, xrayPhonicsMode, activeLangConfig.code)}</strong>
+                                    <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                                      Box {item.boxLevel || 1}/5
+                                    </span>
+                                  </div>
+                                  {item.meaning && <span className="text-[10px] text-amber-300 block" dir="rtl">{item.meaning}</span>}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleSaveStudentWord(item.word)}
+                                  className="text-rose-400 hover:text-rose-300 text-xs ml-1"
+                                  title="إزالة من محفظتي"
+                                >
+                                  ✕
+                                </button>
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => toggleSaveStudentWord(item.word)}
-                                className="text-rose-400 hover:text-rose-300 text-xs ml-1"
-                                title="إزالة من محفظتي   "
-                              >
-                                ✕
-                              </button>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </div>
                   )}
-
 
 {/* ======================================================= */}
                   {/* 🧱 عرض محتوى الدرس مقسماً إلى شرائح حية قابلة للتفاعل والتعديل */}
@@ -5723,13 +6952,15 @@ td({children}) {
                                   {codeStr}
                                 </SyntaxHighlighter>
                               </div>
-                            ) : (
+                          ) : (
+                              // ✨ FIX: BiDi Direction Fix - ضبط اتجاه الكبسولة تلقائياً (RTL للعربية و LTR للأجنبية) لمنع انعكاس الأقواس والنقاط
                               <code
                                 onClick={() => isShortForeignPhrase && handlePlayAudioText(codeStr.split('(')[0].replace(/\.\.\./g, '').trim(), studentDefaultSpeed, `inline_${codeStr}`)}
                                 className={`code-font bg-slate-800/90 text-emerald-300 px-2 py-0.5 rounded-md text-[0.9em] border border-slate-700/60 mx-0.5 inline-flex items-center gap-1 ${
                                   isShortForeignPhrase ? 'cursor-pointer hover:bg-purple-900/50 hover:border-purple-400 hover:text-white transition-all' : ''
                                 }`}
-                                dir="ltr"
+                                dir={/[\u0600-\u06FF]/.test(codeStr) ? 'rtl' : 'ltr'}
+                                style={{ unicodeBidi: 'isolate' }}
                                 title={isShortForeignPhrase ? `اضغط لسماع النطق باللغة ${activeLangConfig.nameAr} 🔊` : ''}
                                 {...props}
                               >
@@ -6068,15 +7299,54 @@ td({children}) {
                                 >
                                   {msg.role === 'student' ? (
                                     <div className="max-w-[90%] rounded-2xl p-4 md:p-5 space-y-3 bg-gradient-to-br from-emerald-950/60 to-teal-950/40 border border-emerald-500/40 text-emerald-100 shadow-lg">
-                                      <div className="flex items-center justify-between gap-4 border-b border-emerald-500/20 pb-2">
+                                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-500/20 pb-2.5">
                                         <span className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
-                                          <UserCheck size={14} /> ما قلته أنت (Your Spoken Reply)
+                                          <UserCheck size={14} /> ما التقطه المايكروفون (Spoken Transcript)
                                         </span>
-                                        {typeof msg.score === 'number' && (
-                                          <span className="text-[10px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-0.5 rounded-full">
-                                            الطلاقة: {msg.score}%
+
+                                        {/* ✨ FIX: Phase 2 Separated Multi-Metric Assessment Badges */}
+                                        <div className="flex flex-wrap items-center gap-1.5">
+                                          {typeof msg.transcriptMatchScore === 'number' ? (
+                                            <span
+                                              className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border ${
+                                                msg.transcriptMatchScore >= 75
+                                                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                                                  : msg.transcriptMatchScore >= 45
+                                                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                                                    : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                                              }`}
+                                              title="نسبة تطابق النص الذي تعرف عليه المتصفح (STT) مع العبارة المطلوبة"
+                                            >
+                                              {msg.transcriptMatchScore >= 75
+                                                ? `🎯 تطابق النص (STT): ${msg.transcriptMatchScore}%`
+                                                : msg.transcriptMatchScore >= 45
+                                                  ? `⚠️ تقارب النص (STT): ${msg.transcriptMatchScore}%`
+                                                  : `❌ عدم تطابق النص: ${msg.transcriptMatchScore}%`}
+                                            </span>
+                                          ) : (
+                                            <span className="text-[10px] font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30 px-2.5 py-0.5 rounded-full">
+                                              🎙️ تم التقاط النص صوتياً
+                                            </span>
+                                          )}
+
+                                          {typeof msg.grammarAccuracyScore === 'number' && (
+                                            <span
+                                              className="text-[10px] font-bold bg-indigo-500/20 text-indigo-200 border border-indigo-500/30 px-2 py-0.5 rounded-full"
+                                              title="دقة ترتيب الكلمات واكتمال التركيب النحوي"
+                                            >
+                                              🧱 التركيب: {msg.grammarAccuracyScore}%
+                                            </span>
+                                          )}
+
+                                          <span
+                                            className="text-[10px] font-medium bg-slate-900/90 text-slate-400 border border-slate-700/80 px-2 py-0.5 rounded-full"
+                                            title="مخارج الحروف الفيزيائية لا تقاس عبر STT النصي"
+                                          >
+                                            {typeof msg.pronunciationScore === 'number'
+                                              ? `🔬 مخارج الحروف: ${msg.pronunciationScore}%`
+                                              : '🔬 مخارج الحروف: غير مقاس (فحص STT نصي)'}
                                           </span>
-                                        )}
+                                        </div>
                                       </div>
 
                                       <p className="text-base md:text-[17px] font-bold text-white leading-relaxed" dir="ltr">
@@ -6671,6 +7941,7 @@ td({children}) {
                               </div>
                             )}
 
+{/* ✨ FIX: Honest Speech Feedback - استبدال نصوص مخارج الحروف بمصداقية التعرف الصوتي */}
                             {speechCheckResult && (
                               <div className={`p-4 rounded-xl border text-sm flex items-center justify-between gap-4 ${
                                 speechCheckResult.isGoodMatch
@@ -6679,10 +7950,12 @@ td({children}) {
                               }`}>
                                 <div>
                                   <p className="font-bold">
-                                    {speechCheckResult.isGoodMatch ? '🎉 نطق ممتاز وواضح جداً!' : '💡 قريب جداً! حاول ضبط مخارج الحروف مرة أخرى:'}
+                                    {speechCheckResult.isGoodMatch
+                                      ? '✅ تم تطابق النص المسموع بنجاح!'
+                                      : '💡 لم يتعرف المتصفح على الكلمة بدقة، أعد المحاولة:'}
                                   </p>
                                   <p className="text-xs mt-1" dir="ltr">
-                                    Target: <strong>"{speechCheckResult.target}"</strong> | You said: <strong>"{speechCheckResult.spoken}"</strong>
+                                    Target: <strong>"{speechCheckResult.target}"</strong> | Detected: <strong>"{speechCheckResult.spoken || '...'}"</strong>
                                   </p>
                                 </div>
                                 <button
@@ -6694,6 +7967,7 @@ td({children}) {
                                 </button>
                               </div>
                             )}
+
                           </div>
                         ) : (
                           <div className="bg-[#0b1120] border border-slate-800 rounded-2xl p-6 shadow-xl">

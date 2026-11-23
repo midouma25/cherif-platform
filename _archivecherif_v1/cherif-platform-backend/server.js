@@ -1087,6 +1087,39 @@ app.post('/api/courses/:courseId/sync-full-course', async (req, res) => {
 // تشغيل السيرفر
 // ==========================================
 const PORT = process.env.PORT || 5001;
+
+// [AUTO-FUNNEL CHERIF-PLATFORM 5001 ROUTES V1]
+// ============================================================================
+// 🎓 مسارات القمع الآلي وإعادة تهيئة الكورسات في سيرفر Cherif-Platform (5001)
+// ============================================================================
+app.post('/api/courses/platform-reset', async (req, res) => {
+    try {
+        const { resetMode = 'capsules_only' } = req.body || {};
+        let filter = {};
+        if (resetMode === 'capsules_only') {
+            filter = {
+                $or: [
+                    { courseCategory: 'carousel_capsule' },
+                    { 'certificateMeta.isCarouselCapsule': true },
+                    { title: /^كبسولة تطبيقية:/ }
+                ]
+            };
+        }
+        const result = await Course.deleteMany(filter);
+        if (typeof Lesson !== "undefined" && resetMode === "all") {
+            await Lesson.deleteMany({});
+        }
+        return res.json({
+            success: true,
+            deletedCount: result.deletedCount || 0,
+            resetMode
+        });
+    } catch (error) {
+        console.error('❌ [5001 Platform Reset Error]:', error.message);
+        return res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 app.listen(PORT, () => {
     console.log(`🚀 سيرفر Cherif Platform يعمل بقوة على المنفذ http://localhost:${PORT}`);
 });

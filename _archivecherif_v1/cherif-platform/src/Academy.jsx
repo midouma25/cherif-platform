@@ -105,7 +105,8 @@ export const parseCourseHierarchy = (course) => {
       : `بناء وتطوير مشروع عملي متكامل يطبق مفاهيم (${shortCleanTitle}) خطوة بخطوة بالاستعانة بأوامر AI Agent ورفعه بشكل احترافي على حسابك في GitHub.`
   );
 
-  const isPartOfCertificate = Boolean(parentCertTitle);
+  const isCarouselCapsule = Boolean(course?.courseCategory === 'carousel_capsule' || meta.isCarouselCapsule || rawDesc.includes('|||CAPSULE_META:') || /^كبسولة/i.test(rawTitle));
+  const isPartOfCertificate = Boolean(parentCertTitle) && !isCarouselCapsule;
   const estimatedHours = course.estimatedHours || 16;
   const xpReward = (courseOrder && courseOrder < 50 ? 1200 + (courseOrder * 150) : 1800);
 
@@ -127,6 +128,7 @@ export const parseCourseHierarchy = (course) => {
     cleanDescription,
     richExtendedDescription,
     isPartOfCertificate,
+    isCarouselCapsule,
     isLanguageCourse,
     isNoExamProject,
     langProfile,
@@ -369,11 +371,12 @@ const Academy = () => {
   }, [courses]);
 
   const filteredCrashCourses = enrichedCourses.filter(course => {
-    const matchesSearch = 
-      course.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    // [CAPSULE ISOLATION V3] استبعاد كبسولات الكاروسيل التمهيدية من كتالوج الأكاديمية الرسمي
+    if (course.isCarouselCapsule) return false;
+    const matchesSearch =
+      course.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       course.cleanDescription.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (course.parentCertTitle && course.parentCertTitle.toLowerCase().includes(searchTerm.toLowerCase()));
-
     if (!matchesSearch) return false;
     if (activeTab === 'standalone') return !course.isPartOfCertificate;
     if (activeTab === 'languages') return course.isLanguageCourse;

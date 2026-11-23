@@ -14,6 +14,7 @@ import AdminDashboard from './AdminDashboard';
 import StudentHub from './StudentHub'; 
 import CourseDetails from './CourseDetails';
 import Classroom from './Classroom';
+import CapsuleClassroom from './CapsuleClassroom';
 import Rankings from './Rankings'; 
 import Certificate from './Certificate';
 import LandingPage from './LandingPage';
@@ -88,6 +89,8 @@ const App = () => {
               <Route path="/login" element={<Auth />} />
               <Route path="/course/:id" element={<CourseDetails />} />
               <Route path="/course/:id/learn" element={<Classroom />} />
+              <Route path="/capsule/:id" element={<CapsuleClassroom />} />
+              <Route path="/classroom/:id" element={<Classroom />} />
               <Route path="/language-exam-center" element={<LanguageExamCenter />} />
               
               {/* مسارات محمية بصلاحيات (RBAC) */}

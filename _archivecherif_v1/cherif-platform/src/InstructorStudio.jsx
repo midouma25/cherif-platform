@@ -228,6 +228,24 @@ const InstructorStudio = () => {
   // ==========================================
   // 📥 استيراد الكورس أو الشهادة المهنية الكاملة من ملف JSON
   // ==========================================
+    // [AUTO-FUNNEL PLATFORM RESET STUDIO V1]
+  const handleResetPlatformFromStudio = async (resetMode = 'capsules_only') => {
+    const msg = resetMode === 'capsules_only'
+      ? 'هل تريد مسح كبسولات الكاروسيل التجريبية فقط مع الإبقاء على الكورسات والشهادات الأساسية؟'
+      : 'تحذير: هل تريد مسح جميع الكورسات وإعادة تهيئة المنصة من الصفر؟';
+    if (!window.confirm(msg)) return;
+    try {
+      const res = await axios.post('http://127.0.0.1:5001/api/courses/platform-reset', { resetMode });
+      if (res.data?.success) {
+        alert('تم تنظيف المنصة بنجاح (حُذف ' + (res.data.deletedCount || 0) + ' كورس).');
+        fetchMyCourses();
+        fetchStats();
+      }
+    } catch (err) {
+      alert('تعذر تنفيذ إعادة التهيئة. تأكد من تشغيل سيرفر 5001.');
+    }
+  };
+
   const handleImportJSON = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -364,6 +382,7 @@ const InstructorStudio = () => {
                       )}
                       استيراد كورس أو شهادة مهنية (JSON)
                     </button>
+                    <button type="button" onClick={() => handleResetPlatformFromStudio('capsules_only')} className="bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/30 font-bold py-2.5 px-4 rounded-xl transition-all text-xs mr-2">🧹 مسح كبسولات الكاروسيل</button>
                   </div>
                 </div>
                 {courses.length === 0 ? (

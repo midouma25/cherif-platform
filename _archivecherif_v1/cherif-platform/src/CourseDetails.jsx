@@ -242,6 +242,11 @@ const CourseDetails = () => {
         
         if (courseRes.data.success) {
           const rawCourse = courseRes.data.course;
+          // [AUTO-REDIRECT CAPSULE TO STANDALONE VIEW V3]
+          if (rawCourse.courseCategory === 'carousel_capsule' || rawCourse.certificateMeta?.isCarouselCapsule || String(rawCourse.description || '').includes('|||CAPSULE_META:')) {
+            navigate('/capsule/' + id, { replace: true });
+            return;
+          }
           const embeddedUnitsMap = extractCourseUnitsMap(rawCourse.description);
           const cleanedTitle = sanitizeDuplicateCoursePrefix(rawCourse.title);
           const parsedCurrent = parseCourseHierarchy({
@@ -279,6 +284,13 @@ const CourseDetails = () => {
   }, [id]);
 
   const handleEnrollment = async () => {
+    // [AUTO-FUNNEL DIRECT CAPSULE ACCESS V1]
+    const _tok = localStorage.getItem('cherif_token');
+    if (!_tok && (course?.price === 0 || course?.isCarouselCapsule || course?.certificateMeta?.isCarouselCapsule)) {
+      setIsEnrolled(true);
+      navigate('/course/' + id + '/learn');
+      return;
+    }
     const token = localStorage.getItem('cherif_token');
     if (!token) {
       alert("يجب عليك تسجيل الدخول لتتمكن من الاشتراك وبدء جمع نقاط الـ EXP!");
