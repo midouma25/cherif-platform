@@ -3,10 +3,9 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import MainLayout from './layouts/MainLayout';
 import LandingPage from './pages/LandingPage';
 import Systems from './pages/Systems';
-import Pulse from './pages/Pulse'; // 👈 استيراد הגناح التسويقي (المرصد)
-
-// صفحة مؤقتة لـ SSO (لم نبرمجها بعد)
-const Auth = () => <div className="min-h-screen flex items-center justify-center text-4xl font-black text-cyan-400">XERIV SSO (بوابة الدخول)</div>;
+import Pulse from './pages/Pulse';
+import ArticleDetails from './pages/ArticleDetails';
+import Auth from './pages/Auth'; // 👈 استيراد البوابة الحقيقية التي برمجناها
 
 const App = () => {
   return (
@@ -20,6 +19,7 @@ const App = () => {
             <Route path="/" element={<LandingPage />} />
             <Route path="/systems" element={<Systems />} />
             <Route path="/pulse" element={<Pulse />} />
+            <Route path="/article/:id" element={<ArticleDetails />} />
             <Route path="/auth" element={<Auth />} />
           </Routes>
         </MainLayout>
