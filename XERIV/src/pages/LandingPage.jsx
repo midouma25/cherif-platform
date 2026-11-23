@@ -11,7 +11,7 @@ const LandingPage = () => {
       {/* ========================================= */}
       <div className="relative w-full h-screen flex items-center justify-center overflow-hidden">
         
-        {/* فيديو الخلفية التكنولوجي */}
+{/* فيديو الخلفية التكنولوجي */}
         <video 
           autoPlay 
           loop 
@@ -19,8 +19,8 @@ const LandingPage = () => {
           playsInline 
           className="absolute inset-0 w-full h-full object-cover opacity-30 mix-blend-screen"
         >
-          {/* رابط تجريبي لفيديو Data/Tech - يمكن تغييره لاحقاً */}
-          <source src="https://cdn.pixabay.com/video/2020/05/25/40138-424756543_large.mp4" type="video/mp4" />
+          {/* رابط فيديو احترافي ومستقر للخوادم والبيانات */}
+          <source src="https://cdn.coverr.co/videos/coverr-server-room-4712/1080p.mp4" type="video/mp4" />
         </video>
 
         {/* طبقات التدرج اللوني (Overlays) لدمج الفيديو مع الخلفية وإبراز النص */}

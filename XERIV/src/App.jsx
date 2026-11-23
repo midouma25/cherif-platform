@@ -2,10 +2,10 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import MainLayout from './layouts/MainLayout';
 import LandingPage from './pages/LandingPage';
+import Systems from './pages/Systems';
+import Pulse from './pages/Pulse'; // 👈 استيراد הגناح التسويقي (المرصد)
 
-// صفحات مؤقتة (Placeholders)
-const Systems = () => <div className="min-h-screen flex items-center justify-center text-4xl font-black text-cyan-400">XERIV Systems (قريباً)</div>;
-const Pulse = () => <div className="min-h-screen flex items-center justify-center text-4xl font-black text-cyan-400">XERIV Pulse (قريباً)</div>;
+// صفحة مؤقتة لـ SSO (لم نبرمجها بعد)
 const Auth = () => <div className="min-h-screen flex items-center justify-center text-4xl font-black text-cyan-400">XERIV SSO (بوابة الدخول)</div>;
 
 const App = () => {
