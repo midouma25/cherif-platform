@@ -5,7 +5,8 @@ import LandingPage from './pages/LandingPage';
 import Systems from './pages/Systems';
 import Pulse from './pages/Pulse';
 import ArticleDetails from './pages/ArticleDetails';
-import Auth from './pages/Auth'; // 👈 استيراد البوابة الحقيقية التي برمجناها
+import Auth from './pages/Auth';
+import Dashboard from './pages/Dashboard'; // 👈 استيراد لوحة القيادة المركزية
 
 const App = () => {
   return (
@@ -21,6 +22,7 @@ const App = () => {
             <Route path="/pulse" element={<Pulse />} />
             <Route path="/article/:id" element={<ArticleDetails />} />
             <Route path="/auth" element={<Auth />} />
+            <Route path="/dashboard" element={<Dashboard />} /> {/* 👈 مسار لوحة القيادة */}
           </Routes>
         </MainLayout>
       </div>

@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { 
   LayoutDashboard, Terminal, Activity, BookOpen, ShieldCheck, 
   Settings, LogOut, Bell, Search, Hexagon, Zap, ArrowUpLeft, 
-  Clock, CheckCircle2, AlertTriangle, CreditCard, ChevronLeft
+  Clock, CheckCircle2, AlertTriangle, CreditCard, ChevronLeft,
+  MonitorSmartphone // 👈 تم إضافة الأيقونة المفقودة هنا
 } from 'lucide-react';
 
 const Dashboard = () => {
@@ -33,13 +34,13 @@ const Dashboard = () => {
       {/* ========================================= */}
       {/* 1. الشريط الجانبي (Sidebar) */}
       {/* ========================================= */}
-      <aside className="w-72 bg-[#0b1120] border-l border-slate-800/80 flex flex-col relative z-20 shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+      <aside className="w-72 bg-[#0b1120] border-l border-slate-800/80 flex flex-col relative z-20 shadow-[0_0_50px_rgba(0,0,0,0.5)] shrink-0">
         
         {/* اللوجو والهوية */}
         <div className="h-20 flex items-center px-6 border-b border-slate-800/80">
           <Link to="/" className="flex items-center gap-2.5 group w-fit">
             <Hexagon size={24} className="text-cyan-400 group-hover:text-cyan-300 transition-colors" strokeWidth={1.5} />
-            <span className="text-xl font-black text-white tracking-[0.2em] font-mono">XERIV</span>
+            <span className="text-xl font-black text-white tracking-[0.2em] font-mono mt-1">XERIV</span>
           </Link>
         </div>
 
@@ -102,7 +103,7 @@ const Dashboard = () => {
         <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] bg-cyan-900/10 rounded-full blur-[120px] pointer-events-none"></div>
 
         {/* شريط الأدوات العلوي (Topbar) */}
-        <header className="h-20 border-b border-slate-800/80 bg-[#0b1120]/50 backdrop-blur-xl flex items-center justify-between px-8 relative z-10">
+        <header className="h-20 border-b border-slate-800/80 bg-[#0b1120]/50 backdrop-blur-xl flex items-center justify-between px-8 relative z-10 shrink-0">
           <div className="flex items-center gap-4 w-full max-w-md">
             <div className="relative w-full group">
               <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-cyan-400 transition-colors" size={16} />
@@ -115,7 +116,7 @@ const Dashboard = () => {
           </div>
 
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-full">
+            <div className="hidden sm:flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-full">
               <ShieldCheck size={14} className="text-emerald-400" />
               <span className="text-[11px] font-bold text-emerald-300 tracking-wider">الاتصال مشفر وآمن</span>
             </div>
@@ -127,23 +128,23 @@ const Dashboard = () => {
         </header>
 
         {/* المحتوى المتغير (Dynamic Content) */}
-        <div className="flex-1 overflow-y-auto p-8 relative z-10 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto p-6 md:p-8 relative z-10 custom-scrollbar">
           
           {activeTab === 'overview' && (
             <div className="max-w-6xl mx-auto space-y-8 animate-fade-in-up">
               
-              <div className="flex items-end justify-between mb-8">
+              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
                 <div>
                   <h2 className="heading-xeriv text-3xl font-black text-white">نظرة عامة على الأنظمة</h2>
                   <p className="text-sm text-slate-400 mt-2">إليك ملخص سريع لحالة حسابك وتراخيصك الحالية.</p>
                 </div>
-                <Link to="/systems" className="bg-cyan-600 hover:bg-cyan-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-all shadow-[0_0_15px_rgba(8,145,178,0.3)] flex items-center gap-2">
+                <Link to="/systems" className="bg-cyan-600 hover:bg-cyan-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-all shadow-[0_0_15px_rgba(8,145,178,0.3)] flex items-center gap-2 w-fit">
                   تصفح أنظمة جديدة <ArrowUpLeft size={16} />
                 </Link>
               </div>
 
               {/* بطاقات الإحصائيات (Stats Widgets) */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-2xl shadow-lg">
                   <div className="flex justify-between items-start mb-4">
                     <div className="p-2.5 bg-cyan-500/10 rounded-xl text-cyan-400"><Terminal size={20} /></div>
@@ -179,19 +180,19 @@ const Dashboard = () => {
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 pt-4">
                 
                 {/* قائمة التراخيص النشطة */}
-                <div className="lg:col-span-8 bg-[#0b1120]/80 border border-slate-800 rounded-3xl p-6 shadow-xl">
+                <div className="lg:col-span-8 bg-[#0b1120]/80 border border-slate-800 rounded-3xl p-6 shadow-xl flex flex-col">
                   <h3 className="text-lg font-black text-white mb-6 flex items-center gap-2">
                     <Terminal className="text-cyan-400" size={20} /> تراخيص الأنظمة الخاصة بي
                   </h3>
                   
-                  <div className="bg-slate-900/50 border border-slate-800 hover:border-cyan-500/30 rounded-2xl p-5 flex flex-col md:flex-row items-center justify-between gap-6 transition-all group">
+                  <div className="bg-slate-900/50 border border-slate-800 hover:border-cyan-500/30 rounded-2xl p-5 flex flex-col md:flex-row items-center justify-between gap-6 transition-all group mt-auto mb-auto">
                     <div className="flex items-center gap-4 w-full md:w-auto">
                       <div className="w-14 h-14 bg-cyan-950/50 border border-cyan-500/30 rounded-xl flex items-center justify-center text-cyan-400 shrink-0">
                         <MonitorSmartphone size={24} />
                       </div>
                       <div>
                         <div className="flex items-center gap-2 mb-1">
-                          <h4 className="font-black text-white text-base">XERIV ERP & POS</h4>
+                          <h4 className="heading-xeriv font-black text-white text-base">XERIV ERP & POS</h4>
                           <span className="text-[10px] font-black bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/30 flex items-center gap-1">
                             <CheckCircle2 size={10} /> نشط
                           </span>
@@ -201,10 +202,10 @@ const Dashboard = () => {
                     </div>
                     <div className="flex items-center gap-3 w-full md:w-auto">
                       <button className="flex-1 md:flex-none bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-4 py-2.5 rounded-lg transition-colors">
-                        تحميل التحديث (v2.1)
+                        تحميل (v2.1)
                       </button>
                       <button className="flex-1 md:flex-none bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-black px-4 py-2.5 rounded-lg transition-colors shadow-lg">
-                        لوحة تحكم النظام
+                        لوحة النظام
                       </button>
                     </div>
                   </div>
@@ -242,7 +243,7 @@ const Dashboard = () => {
 
           {/* الرسالة التحذيرية المؤقتة للأجنحة التي لم تبرمج بعد داخل لوحة القيادة */}
           {activeTab !== 'overview' && (
-            <div className="h-full flex flex-col items-center justify-center text-center animate-fade-in-up">
+            <div className="h-full flex flex-col items-center justify-center text-center animate-fade-in-up mt-20">
               <Hexagon size={64} className="text-slate-700 mb-6" strokeWidth={1} />
               <h2 className="heading-xeriv text-3xl font-black text-white mb-2">جاري تجهيز هذا الجناح</h2>
               <p className="text-slate-400 max-w-md">أنت تحاول الوصول إلى جناح ( {sidebarLinks.find(l => l.id === activeTab)?.name} ) وهو حالياً قيد التطوير في مركز الهندسة. سيتم إطلاقه قريباً.</p>

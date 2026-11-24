@@ -1,19 +1,20 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { Hexagon, Mail, Lock, User, LogIn, UserPlus, ArrowRight, ShieldCheck, Zap } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [formData, setFormData] = useState({ name: '', email: '', password: '' });
   const [isLoading, setIsLoading] = useState(false);
+  const navigate = useNavigate();
 
   const handleSubmit = (e) => {
     e.preventDefault();
     setIsLoading(true);
-    // محاكاة لعملية تسجيل الدخول/الإنشاء
+    
     setTimeout(() => {
       setIsLoading(false);
-      alert('تم الاتصال بنواة XERIV بنجاح! (محاكاة)');
+      navigate('/dashboard');
     }, 1500);
   };
 
@@ -30,18 +31,13 @@ const Auth = () => {
         playsInline 
         className="absolute inset-0 w-full h-full object-cover opacity-20 mix-blend-screen"
       >
-        {/* فيديو تكنولوجي للبيانات/الخوادم يعكس الهوية */}
         <source src="https://cdn.coverr.co/videos/coverr-server-room-4712/1080p.mp4" type="video/mp4" />
       </video>
 
-      {/* طبقات الإضاءة والظل فوق الفيديو */}
       <div className="absolute inset-0 bg-[#030712]/80"></div>
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-cyan-900/20 rounded-full blur-[120px] pointer-events-none"></div>
       <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-indigo-900/20 rounded-full blur-[120px] pointer-events-none"></div>
 
-      {/* ========================================= */}
-      {/* الحاوية الرئيسية الزجاجية */}
-      {/* ========================================= */}
       <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-2 bg-[#0b1120]/60 backdrop-blur-3xl border border-slate-800/80 rounded-[2rem] shadow-[0_0_50px_rgba(8,145,178,0.15)] overflow-hidden relative z-10 animate-fade-in-up">
         
         {/* ========================================= */}
@@ -82,7 +78,6 @@ const Auth = () => {
         {/* ========================================= */}
         <div className="p-10 md:p-14 flex flex-col justify-center bg-[#050810]/80">
           
-          {/* أزرار التبديل (مصلحة) */}
           <div className="flex bg-slate-900/80 border border-slate-800/80 p-1.5 rounded-2xl mb-10 relative">
             <button 
               onClick={() => setIsLogin(true)} 
@@ -96,7 +91,6 @@ const Auth = () => {
             >
               حساب جديد
             </button>
-            {/* المؤشر المتحرك المصحح - يعتمد على العرض بالنسبة المئوية */}
             <div 
               className={`absolute top-1.5 bottom-1.5 w-[calc(50%-6px)] bg-slate-800 border border-slate-700/50 rounded-xl shadow-md transition-all duration-300 ease-in-out`}
               style={{
@@ -106,11 +100,11 @@ const Auth = () => {
             ></div>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-5 flex flex-col items-center">
             {!isLogin && (
-              <div className="space-y-1.5 animate-fade-in-up" style={{animationDuration: '0.3s'}}>
-                <label className="text-[11px] font-black tracking-wider text-slate-500 uppercase">الاسم الكامل</label>
-                <div className="relative group">
+              <div className="space-y-1.5 animate-fade-in-up w-full max-w-sm" style={{animationDuration: '0.3s'}}>
+                <label className="text-[11px] font-black tracking-wider text-slate-500 uppercase w-full text-right block">الاسم الكامل</label>
+                <div className="relative group w-full">
                   <User className="absolute right-4 top-4 text-slate-500 group-focus-within:text-cyan-400 transition-colors" size={18} />
                   <input 
                     type="text" 
@@ -124,9 +118,9 @@ const Auth = () => {
               </div>
             )}
 
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-black tracking-wider text-slate-500 uppercase">البريد الإلكتروني</label>
-              <div className="relative group">
+            <div className="space-y-1.5 w-full max-w-sm">
+              <label className="text-[11px] font-black tracking-wider text-slate-500 uppercase w-full text-right block">البريد الإلكتروني</label>
+              <div className="relative group w-full">
                 <Mail className="absolute right-4 top-4 text-slate-500 group-focus-within:text-cyan-400 transition-colors" size={18} />
                 <input 
                   type="email" 
@@ -140,12 +134,12 @@ const Auth = () => {
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <div className="flex justify-between items-center">
-                <label className="text-[11px] font-black tracking-wider text-slate-500 uppercase">كلمة المرور</label>
+            <div className="space-y-1.5 w-full max-w-sm">
+              <div className="flex justify-between items-center w-full">
+                <label className="text-[11px] font-black tracking-wider text-slate-500 uppercase text-right">كلمة المرور</label>
                 {isLogin && <a href="#" className="text-[11px] font-bold text-cyan-500 hover:text-cyan-400 transition-colors">نسيت الكلمة؟</a>}
               </div>
-              <div className="relative group">
+              <div className="relative group w-full">
                 <Lock className="absolute right-4 top-4 text-slate-500 group-focus-within:text-cyan-400 transition-colors" size={18} />
                 <input 
                   type="password" 
@@ -161,7 +155,7 @@ const Auth = () => {
             <button 
               disabled={isLoading} 
               type="submit" 
-              className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-black py-4 rounded-xl transition-all flex justify-center items-center gap-2 mt-6 shadow-[0_0_20px_rgba(8,145,178,0.3)] hover:shadow-[0_0_30px_rgba(8,145,178,0.5)] disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full max-w-sm bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-black py-4 rounded-xl transition-all flex justify-center items-center gap-2 mt-6 shadow-[0_0_20px_rgba(8,145,178,0.3)] hover:shadow-[0_0_30px_rgba(8,145,178,0.5)] disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? (
                 <span className="flex items-center gap-2">
@@ -169,9 +163,9 @@ const Auth = () => {
                   جاري المصادقة...
                 </span>
               ) : isLogin ? (
-                <><LogIn size={18} /> الدخول للنظام</>
+                <>الدخول للنظام <LogIn size={18} className="transform scale-x-[-1]" /></>
               ) : (
-                <><UserPlus size={18} /> إنشاء حسابي الموحد</>
+                <>إنشاء حسابي الموحد <UserPlus size={18} className="transform scale-x-[-1]" /></>
               )}
             </button>
           </form>
